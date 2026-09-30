@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Azores Cyber 360 - SOC RADAR</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div id="demo-banner" class="demo-banner" hidden>DADOS DE DEMONSTRAÇÃO — não são dados do XSIAM</div>
+
+  <header class="top">
+    <!-- Decorativo: um varrimento de radar à esquerda do nome. -->
+    <!-- Os atrasos dos pontos põem o «ping» no instante em que a linha passa
+         por cima deles: atraso = ângulo/360 × 3 s − 0,24 s (pico do ping). -->
+    <div class="radar-mini" aria-hidden="true">
+      <div class="radar-anel radar-anel-1"></div>
+      <div class="radar-anel radar-anel-2"></div>
+      <div class="radar-anel radar-anel-3"></div>
+      <div class="radar-cruz radar-cruz-h"></div>
+      <div class="radar-cruz radar-cruz-v"></div>
+      <div class="radar-varrimento"></div>
+      <div class="radar-ponto" style="top: 30%; left: 65%; animation-delay: 0.07s;"></div>  <!-- 37° -->
+      <div class="radar-ponto" style="top: 70%; left: 72%; animation-delay: 0.86s;"></div>  <!-- 132° -->
+      <div class="radar-ponto" style="top: 60%; left: 35%; animation-delay: 1.73s;"></div>  <!-- 236° -->
+    </div>
+    <h1 class="brand"><span>Azores Cyber 360</span> <span>- SOC RADAR</span></h1>
+
+    <section class="grupo-cabecalho" aria-label="Casos abertos por severidade">
+      <div class="cartoes">
+      <div class="kpi sev-critical"><span class="kpi-label">Crítico</span><span class="kpi-value" id="k-critical">–</span></div>
+      <div class="kpi sev-high"><span class="kpi-label">Alto</span><span class="kpi-value" id="k-high">–</span></div>
+      <div class="kpi sev-medium"><span class="kpi-label">Médio</span><span class="kpi-value" id="k-medium">–</span></div>
+      <div class="kpi sev-low"><span class="kpi-label">Baixo</span><span class="kpi-value" id="k-low">–</span></div>
+      </div>
+      <span class="rotulo-grupo">casos abertos</span>
+    </section>
+
+    <div class="divider" aria-hidden="true"></div>
+
+    <section class="grupo-cabecalho" aria-label="Prevenção nas últimas 24h">
+      <div class="cartoes">
+      <div class="kpi kpi-contained" title="Casos resolvidos automaticamente (playbook/regra) nas últimas 24h">
+        <span class="kpi-label">Auto contido</span><span class="kpi-value" id="k-contained">–</span></div>
+      <div class="kpi kpi-malware" title="Alertas de malware, spyware, vírus ou WildFire com ação de bloqueio/prevenção nas últimas 24h (inclui o Anti-Spyware da NGFW)">
+        <span class="kpi-label">Ameaças bloqueadas</span><span class="kpi-value" id="k-malware">–</span></div>
+      </div>
+      <span class="rotulo-grupo">prevenção · 24h</span>
+    </section>
+
+    <div class="kpi kpi-mttr" title="Mean Time To Resolve: da criação do caso à resolução, casos resolvidos nas últimas 24h, sem os resolvidos automaticamente nem duplicados">
+      <span class="kpi-label">MTTR · resolução</span>
+      <span class="kpi-value"><span id="k-mttr">–</span><small id="k-mttr-unit"> min</small></span>
+      <span class="kpi-sub" id="k-mttr-sub">últimas 24h</span>
+    </div>
+
+    <div class="api-status" id="api-status" data-state="a_sincronizar">
+      <span class="dot" aria-hidden="true"></span>
+      <div>
+        <div class="api-state" id="api-state">A sincronizar…</div>
+        <div class="api-last" id="api-last">Última vez: —</div>
+      </div>
+    </div>
+
+    <div class="clock">
+      <div class="clock-time"><span id="clock-time">--:--:--</span> <span class="clock-tz" id="clock-tz"></span></div>
+      <div class="clock-date"><span id="clock-date"></span></div>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel p-volume">
+      <div class="panel-head">
+        <h2>Volume de Incidentes</h2>
+        <span class="warn" id="volume-warn" hidden>dados truncados</span>
+        <span class="note" id="volume-note" hidden title="Clica em «Médio» na legenda para o mostrar"></span>
+        <div class="seg" role="group" aria-label="Período">
+          <button data-range="24h">24h</button><button data-range="7d" class="on">7d</button><button data-range="30d">30d</button><button data-range="90d">90d</button>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="volume-chart" aria-label="Casos criados por período, empilhados por severidade"></canvas></div>
+    </section>
+
+    <section class="panel p-cases" id="cases-panel">
+      <div class="panel-head">
+        <h2>Casos <span class="muted" id="cases-count"></span></h2>
+        <span class="paused" id="cases-paused" hidden>❚❚ pausa</span>
+      </div>
+      <table class="tbl">
+        <colgroup><col class="c-sev"><col class="c-case"><col><col><col><col><col class="c-age"><col class="c-state"></colgroup>
+        <thead><tr><th></th><th>Caso</th><th>Host</th><th>Utilizador</th><th>Deteção</th><th>Técnica MITRE</th><th class="num">Idade</th><th>Estado</th></tr></thead>
+      </table>
+      <div class="scroll-view" id="cases-view">
+        <div class="scroll-track">
+          <table class="tbl" id="cases-table">
+            <colgroup><col class="c-sev"><col class="c-case"><col><col><col><col><col class="c-age"><col class="c-state"></colgroup>
+            <tbody id="cases-body"><tr><td colspan="8" class="empty">A aguardar a primeira sincronização com o XSIAM…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel p-mitre" id="mitre-panel">
+      <div class="panel-head">
+        <h2>MITRE ATT&amp;CK <span class="muted" id="mitre-period"></span></h2>
+        <span class="warn" id="mitre-warn" hidden>dados truncados</span>
+        <div class="tabs" role="tablist">
+          <button data-view="tactics" class="on">Táticas</button><button data-view="techniques">Top técnicas</button>
+        </div>
+      </div>
+      <div class="mitre-view scroll-view" id="mitre-tactics-view">
+        <div class="scroll-track"><div class="tac-grid" id="mitre-tactics"></div></div>
+      </div>
+      <div class="mitre-view" id="mitre-techniques" hidden>
+        <table class="tbl">
+          <colgroup><col class="c-rank"><col class="c-tid"><col><col class="c-n"></colgroup>
+          <thead><tr><th class="num">#</th><th>ID</th><th>Técnica</th><th class="num">Casos</th></tr></thead>
+        </table>
+        <div class="scroll-view" id="mitre-techniques-view">
+          <div class="scroll-track">
+            <table class="tbl"><colgroup><col class="c-rank"><col class="c-tid"><col><col class="c-n"></colgroup><tbody id="mitre-techniques-body"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel p-top">
+      <div class="panel-head"><h2>Alertas mais críticos <span class="muted">· 24h</span></h2></div>
+      <table class="tbl">
+        <thead><tr><th class="c-sev"></th><th>ID</th><th>Alerta</th><th>Host / Utilizador</th><th>MITRE</th><th class="num">Idade</th></tr></thead>
+        <tbody id="top-body"><tr><td colspan="6" class="empty">A aguardar a primeira sincronização…</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="panel p-radar">
+      <div class="panel-head"><h2>Gravidade das Ameaças</h2></div>
+      <div class="radar-wrap">
+        <div class="chart-box"><canvas id="radar-chart" aria-label="Casos por tática MITRE: hoje contra a média dos últimos 7 dias"></canvas></div>
+        <div class="radar-note" id="radar-note"></div>
+      </div>
+    </section>
+
+    <section class="panel p-brief">
+      <div class="panel-head"><h2>Briefing</h2><span class="muted" id="brief-meta"></span></div>
+      <ol class="brief" id="brief-lines"><li class="muted">A preparar…</li></ol>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <img src="img/barra-cofinanciamento.png" alt="Açores 2030 · Governo dos Açores · Portugal 2030 · Cofinanciado pela União Europeia">
+    <span class="foot-sync" id="foot-sync"></span>
+  </footer>
+</body>
+</html>

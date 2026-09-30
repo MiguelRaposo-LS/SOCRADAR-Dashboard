@@ -1,0 +1,21 @@
+# Segredos: a chave do Cortex e a palavra-passe do dashboard.
+# Qualquer variante (.env.local, .env.bak, .env.producao…) fica de fora;
+# só o exemplo, sem valores, entra.
+.env
+.env.*
+!.env.example
+
+# Estado gravado e logs: têm nomes de casos, hosts e utilizadores.
+estado/
+logs/
+*.log
+*.tmp
+
+# Binário de terceiros que o INSTALACAO.md manda descarregar.
+windows/nssm.exe
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

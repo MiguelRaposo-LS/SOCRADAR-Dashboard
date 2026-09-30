@@ -1,0 +1,312 @@
+/* Azores Cyber 360 — pensado para um monitor de parede 1920×1080, sem scroll.
+   As cores de severidade são definidas AQUI e só aqui; o app.js lê-as destas
+   variáveis para os gráficos, para que o Crítico do cabeçalho e o Crítico das
+   barras nunca possam divergir. Validadas contra a superfície escura: pares
+   adjacentes distinguíveis com e sem daltonismo. */
+:root {
+  --sev-critical: #d92b4a;
+  --sev-high:     #f0862a;
+  --sev-medium:   #f7dc55;
+  --sev-low:      #3fb970;
+
+  --contained: #2fc4b2;   /* verde-água */
+  --malware:   #2a9bb8;   /* azul-petróleo */
+  --mttr:      #a178f0;   /* roxo */
+
+  --ok: #3fb970;
+  --degraded: #f7dc55;
+  --down: #d92b4a;
+
+  --bg: #070b12;
+  --surface: #0d1420;
+  --surface-2: #131c2b;
+  --line: #1f2a3c;
+  --grid: #1a2433;
+  --ink: #e6ebf2;
+  --ink-2: #a9b4c4;
+  --ink-3: #6f7c90;
+  --accent: #5b8def;
+
+  --gap: 0.667rem;
+  --rotulo-h: 1.267rem;  /* .rotulo-grupo: 0.267rem de gap + 1rem de linha */
+  --radius: 0.533rem;
+  /* A unidade de tudo o resto. Escala com a largura E com a altura, para o
+     ecrã caber sempre sem scroll: 17px num 1080p, 34px num 4K. Um teto em px
+     (havia um de 17px) deixava o texto com metade do tamanho numa TV 4K. */
+  font-size: min(100vw / 112, 100vh / 63);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+/* Sem isto, um `display: grid` ganha ao atributo hidden e as duas vistas do
+   MITRE ficavam desenhadas uma por cima da outra. */
+[hidden] { display: none !important; }
+/* O ponteiro esconde-se ao fim de 30 s parado (ver app.js, rotator). */
+body.idle-cursor, body.idle-cursor * { cursor: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-variant-numeric: tabular-nums;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+h1, h2 { margin: 0; font-weight: 600; }
+.muted { color: var(--ink-3); font-weight: 400; }
+.num { text-align: right; }
+
+.demo-banner {
+  background: repeating-linear-gradient(135deg, #5a1a24 0 0.933rem, #4a1520 0.933rem 1.867rem);
+  color: #fff; text-align: center; font-weight: 700; letter-spacing: .12em;
+  padding: 0.267rem; font-size: 1.1rem;
+}
+
+/* --- cabeçalho --- */
+.top {
+  display: flex; align-items: stretch; gap: 0.6rem;
+  padding: 0.667rem var(--gap) 0.533rem;
+}
+.brand {
+  /* 1,6 rem com o nome «… - SOC RADAR». Quando o cabeçalho aperta (contadores
+     de 5 dígitos), é o título que cede, partindo entre os dois spans — os
+     cartões, a hora e a data nunca encolhem nem partem linha. */
+  font-size: 1.6rem; letter-spacing: .01em; align-self: center; line-height: 1.15;
+  margin-right: auto; min-width: 0; flex: 0 1 auto;
+}
+.brand span { white-space: nowrap; }
+.top > :not(.brand) { flex-shrink: 0; }
+.clock-time { white-space: nowrap; }
+/* Cada grupo de cartões e o seu rótulo vivem no mesmo container: o rótulo
+   centra-se na largura real dos cartões, seja qual for o número de dígitos. */
+/* A altura do rótulo (gap + linha) é a margem de baixo dos outros cartões do
+   cabeçalho (MTTR, estado, relógio): assim todos acabam à mesma altura. */
+.grupo-cabecalho { --rotulo-gap: 0.267rem; display: flex; flex-direction: column; align-items: center; gap: var(--rotulo-gap); }
+.grupo-cabecalho .cartoes { display: flex; gap: 0.533rem; align-items: stretch; flex: 1; }
+.grupo-cabecalho .rotulo-grupo {
+  width: 100%; text-align: center; line-height: 1rem; height: 1rem;
+  font-size: .72rem; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em;
+}
+.kpi {
+  --c: var(--ink-3);
+  background: var(--surface); border: 1px solid var(--line);
+  border-top: 0.267rem solid var(--c); border-radius: var(--radius);
+  padding: 0.267rem 0.8rem; min-width: 6.4rem;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.kpi-label { font-size: .8rem; color: var(--ink-2); white-space: nowrap; }
+.kpi-value { font-size: 2.1rem; font-weight: 700; line-height: 1.1; }
+.kpi-value small { font-size: .9rem; color: var(--ink-2); font-weight: 500; }
+.kpi-sub { font-size: .75rem; color: var(--ink-3); }
+.sev-critical { --c: var(--sev-critical); }
+.sev-high     { --c: var(--sev-high); }
+.sev-medium   { --c: var(--sev-medium); }
+.sev-low      { --c: var(--sev-low); }
+.kpi-contained { --c: var(--contained); }
+.kpi-malware   { --c: var(--malware); }
+.kpi-mttr      { --c: var(--mttr); margin-bottom: var(--rotulo-h); }
+.divider { width: 1px; background: var(--line); margin: 0.267rem 0.133rem 1.2rem; }
+
+.api-status {
+  display: flex; align-items: center; gap: 0.667rem; margin-bottom: var(--rotulo-h);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.4rem 0.933rem; min-width: 11rem;
+}
+.api-status .dot { width: 0.933rem; height: 0.933rem; border-radius: 50%; background: var(--ink-3); flex: none; }
+.api-status[data-state="operacional"] .dot { background: var(--ok); box-shadow: 0 0 0.667rem var(--ok); }
+.api-status[data-state="degradado"] .dot { background: var(--degraded); }
+.api-status[data-state="sem_ligacao"] .dot { background: var(--down); animation: pulse 1.2s infinite; }
+.api-state { font-weight: 600; white-space: nowrap; }
+.api-last, .kpi-value, .kpi-sub { white-space: nowrap; }
+.api-last { font-size: .8rem; color: var(--ink-2); }
+@keyframes pulse { 50% { opacity: .35; } }
+
+/* Radar decorativo, à esquerda do nome. Verde do «Operacional» (--ok).
+   Só anima transform (o varrimento) e opacity (os pontos): corre no
+   compositor, sem reflow nem repaint por frame — o ecrã corre 24/7. */
+.radar-mini {
+  --radar: var(--ok);
+  --a: color-mix(in srgb, var(--radar) 18%, transparent);
+  width: 2.8rem; height: 2.8rem; flex: none; align-self: center;
+  border-radius: 50%; position: relative; overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--radar) 35%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--radar) 6%, transparent) 0%, rgba(0, 0, 0, 0.4) 100%);
+  box-shadow: 0 0 0.45rem color-mix(in srgb, var(--radar) 25%, transparent) inset;
+}
+/* Anéis concêntricos, como as linhas de distância de um radar real. */
+.radar-anel {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  border: 1px solid var(--a); border-radius: 50%;
+}
+.radar-anel-1 { width: 30%; height: 30%; }
+.radar-anel-2 { width: 60%; height: 60%; }
+.radar-anel-3 { width: 90%; height: 90%; }
+.radar-cruz { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: color-mix(in srgb, var(--radar) 15%, transparent); }
+.radar-cruz-h { width: 100%; height: 1px; }
+.radar-cruz-v { width: 1px; height: 100%; }
+/* Varrimento: um disco inteiro que roda sobre o próprio centro, com a aresta
+   brilhante a 0° (topo) e o rasto a desvanecer para trás. Um quadrado a rodar
+   pelo canto, com o gradiente centrado nele, punha o leque fora do centro. */
+.radar-varrimento {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    transparent 0deg 300deg,
+    color-mix(in srgb, var(--radar) 15%, transparent) 335deg,
+    color-mix(in srgb, var(--radar) 55%, transparent) 360deg);
+  animation: radar-rodar 3s linear infinite;
+}
+@keyframes radar-rodar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* Contactos: acendem quando a linha passa por cima (ver os atrasos no HTML). */
+.radar-ponto {
+  position: absolute; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%;
+  background: var(--radar);
+  box-shadow: 0 0 4px 1px color-mix(in srgb, var(--radar) 80%, transparent);
+  opacity: 0;
+  animation: radar-ping 3s linear infinite;
+}
+@keyframes radar-ping { 0% { opacity: 0; } 8% { opacity: 1; } 20% { opacity: 0; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .radar-varrimento, .radar-ponto { animation: none; }
+  .radar-ponto { opacity: .6; }
+}
+
+/* margin-left: auto divide o espaço livre em dois — metade antes das métricas
+   (margem do título), metade antes da hora — e as métricas ficam ao centro, em
+   vez de encostadas à hora na margem direita. */
+.clock { text-align: right; align-self: center; margin-bottom: var(--rotulo-h); margin-left: auto; padding-right: 0.667rem; }
+.clock-time { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+.clock-tz { font-size: .85rem; color: var(--ink-2); font-weight: 500; }
+.clock-date { font-size: .85rem; line-height: 1.25; color: var(--ink-2); white-space: nowrap; }
+
+/* --- grelha --- */
+.grid {
+  flex: 1; min-height: 0;
+  display: grid; gap: var(--gap); padding: 0 var(--gap);
+  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+  grid-template-rows: repeat(10, minmax(0, 1fr));
+}
+.p-volume { grid-column: 1; grid-row: 1 / 4; }
+.p-cases  { grid-column: 1; grid-row: 4 / 8; }
+.p-mitre  { grid-column: 1; grid-row: 8 / 11; }
+.p-top    { grid-column: 2; grid-row: 1 / 5; }
+.p-radar  { grid-column: 2; grid-row: 5 / 8; }
+.p-brief  { grid-column: 2; grid-row: 8 / 11; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.533rem 0.8rem 0.667rem; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.panel-head { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.4rem; flex: none; }
+.panel-head h2 { font-size: 1.05rem; margin-right: auto; }
+.chart-box { position: relative; flex: 1; min-height: 0; }
+.note { font-size: .8rem; color: var(--ink-2); border: 1px dashed var(--sev-medium); border-radius: 0.267rem; padding: 0.067rem 0.4rem; }
+.warn {
+  font-size: .75rem; color: var(--degraded); border: 1px solid currentColor;
+  border-radius: 0.267rem; padding: 1px 0.4rem;
+}
+
+.seg, .tabs { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 0.4rem; padding: 0.133rem; }
+.seg button, .tabs button {
+  background: none; border: 0; color: var(--ink-2); font: inherit; font-size: .85rem;
+  padding: 0.2rem 0.667rem; border-radius: 0.267rem; cursor: pointer;
+}
+.seg button.on, .tabs button.on { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* --- tabelas --- */
+.tbl { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: .9rem; }
+.tbl th {
+  text-align: left; font-weight: 500; font-size: .75rem; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: .05em; padding: 0.2rem 0.4rem; border-bottom: 1px solid var(--line);
+}
+.tbl td {
+  padding: 0.333rem 0.4rem; border-bottom: 1px solid var(--grid);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tbl .c-sev { width: 1.8rem; }
+.tbl tr.case { cursor: pointer; }
+.tbl tr.case:hover td { background: var(--surface-2); }
+.tbl tr.case.open td { background: var(--surface-2); }
+.tbl .id { color: var(--ink-2); }
+.tbl .tech-id { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .85em; }
+.tbl .rep { color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.267rem; padding: 0 0.267rem; font-size: .85em; font-weight: 600; }
+.tbl .empty { color: var(--ink-3); text-align: center; padding: 1.2rem; white-space: normal; }
+/* As larguras vivem em <col>, e não nos <th>: o cabeçalho e o corpo são
+   tabelas separadas (o corpo desliza, o cabeçalho fica) e têm de alinhar. */
+col.c-sev { width: 1.8rem; }
+col.c-case { width: 28%; }
+col.c-age { width: 4.5rem; }
+col.c-state { width: 8rem; }
+col.c-rank { width: 2.5rem; }
+col.c-tid { width: 7rem; }
+col.c-n { width: 5rem; }
+.p-top .tbl th:nth-child(2) { width: 5.2rem; }
+.p-top .tbl th:nth-child(5) { width: 5.6rem; }
+.p-top .tbl th:nth-child(6) { width: 3.8rem; }
+
+.sev-dot {
+  display: inline-block; width: .8rem; height: .8rem; border-radius: 50%;
+  background: var(--c); vertical-align: middle;
+  /* anel da cor da superfície: a bolinha lê-se sobre qualquer fundo de linha */
+  box-shadow: 0 0 0 0.133rem var(--surface);
+}
+.detail td { white-space: normal; background: var(--bg); color: var(--ink-2); font-size: .85rem; }
+.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.133rem 0.8rem; margin: 0.267rem 0; }
+.detail dt { color: var(--ink-3); }
+.detail dd { margin: 0; word-break: break-all; }
+
+/* Scroll contínuo (ver app.js, scroller): a janela corta, a faixa desliza. */
+.scroll-view { position: relative; overflow: hidden; flex: 1; min-height: 0; }
+.scroll-track { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+.scroll-view:not(.scrolling) .scroll-track { height: 100%; }
+.paused { font-size: .8rem; color: var(--degraded); }
+
+/* --- MITRE --- */
+.mitre-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tac-grid {
+  display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr;
+  grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); column-gap: 1.867rem;
+  height: 100%;
+}
+/* A deslizar (ecrã baixo), cada cópia da grelha tem a sua altura natural. */
+.scrolling .tac-grid { height: auto; grid-template-rows: repeat(7, 2rem); }
+.tac { display: grid; grid-template-columns: 11rem 1fr 3rem; align-items: center; gap: 0.667rem; font-size: .88rem; }
+.tac-name { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tac-bar { height: 0.667rem; background: var(--grid); border-radius: 0 0.267rem 0.267rem 0; overflow: hidden; }
+.tac-bar span { display: block; height: 100%; background: var(--accent); border-radius: 0 0.267rem 0.267rem 0; min-width: 0; }
+.tac-count { text-align: right; font-weight: 600; }
+.tac.zero .tac-count, .tac.zero .tac-name { color: var(--ink-3); }
+
+/* --- radar / briefing --- */
+.radar-wrap { flex: 1; min-height: 0; display: flex; gap: 0.533rem; }
+.radar-wrap .chart-box { flex: 1.6; }
+.radar-note { flex: 1; align-self: center; font-size: .85rem; color: var(--ink-2); }
+.radar-note strong { display: block; color: var(--ink); font-size: 1.05rem; margin: 0.133rem 0; }
+.radar-note .up { color: var(--sev-high); }
+.radar-note .down { color: var(--sev-low); }
+
+.brief { margin: 0; padding-left: 1.3rem; font-size: .95rem; line-height: 1.4; overflow: hidden; }
+.brief li { margin-bottom: 0.267rem; }
+.brief li::marker { color: var(--ink-3); }
+
+/* A barra de cofinanciamento vai tal como foi entregue, sobre branco: as
+   regras de publicitação não deixam recolorir os logótipos nem pô-los sobre
+   fundo escuro. */
+.foot {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: var(--gap); background: #fff; height: 3.6rem; padding: 0 var(--gap);
+  flex: none;
+}
+.foot img { height: 100%; width: auto; display: block; }
+.foot-sync { font-size: .75rem; color: #5a6475; text-align: right; }
+
+/* Fora da parede (portátil, telemóvel): empilha e deixa fazer scroll. */
+@media (max-width: 1100px) {
+  body { overflow: auto; height: auto; }
+  .top { flex-wrap: wrap; }
+  .brand { width: 100%; }
+  .grid { display: flex; flex-direction: column; padding: 0 16px; }
+  .panel { min-height: 320px; }
+  .p-cases { min-height: 460px; }
+  .tac-grid { grid-template-columns: 1fr; grid-auto-flow: row; grid-template-rows: none; }
+}

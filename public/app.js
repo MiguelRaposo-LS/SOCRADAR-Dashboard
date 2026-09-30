@@ -1,0 +1,599 @@
+/* Azores Cyber 360 — frontend.
+   Sem framework: fetch periódico dos /api/*, Chart.js para as barras e o
+   radar, rotação das tabelas com pausa ao passar o rato. A chave do Cortex
+   nunca passa por aqui: o browser só fala com o nosso servidor. */
+"use strict";
+
+const REFRESH_MS = 60_000;
+const MITRE_ROTATE_MS = 20_000;
+const STALE_MS = 10 * 60_000;
+const TZ = "Atlantic/Azores";
+
+const css = getComputedStyle(document.documentElement);
+const v = (name) => css.getPropertyValue(name).trim();
+// Lidas das variáveis CSS — a única definição das cores de severidade.
+const SEV = {
+  critical: { label: "Crítico", color: v("--sev-critical") },
+  high:     { label: "Alto",    color: v("--sev-high") },
+  medium:   { label: "Médio",   color: v("--sev-medium") },
+  low:      { label: "Baixo",   color: v("--sev-low") },
+};
+const SEV_ORDER = ["low", "medium", "high", "critical"]; // de baixo para cima na pilha
+const $ = (id) => document.getElementById(id);
+// Milhares com espaço (5 072, não 5072): lê-se de longe num monitor de parede.
+const nf = (n) => (n === null || n === undefined ? "–" : Number(n).toLocaleString("pt-PT"));
+
+// O Chart.js desenha em px; o resto do ecrã está em rem, que escala com o
+// tamanho do monitor. Sem isto, num 4K os eixos e legendas ficavam com metade
+// do tamanho do texto à volta.
+const rem = () => parseFloat(getComputedStyle(document.documentElement).fontSize);
+function scaleCharts() {
+  // Sem o CDN, o Chart.js não existe; o resto do ecrã tem de funcionar na mesma.
+  if (typeof Chart === "undefined") return;
+  Chart.defaults.font.size = Math.round(rem() * 0.8);
+  Chart.defaults.locale = "pt-PT"; // «25 000», não «25,000»
+  // A legenda e os rótulos do radar têm tamanhos próprios em px (o radar usa
+  // 10px por omissão e ignora o valor global); têm de ser escalados à mão.
+  Chart.defaults.plugins.legend.labels.boxWidth = Chart.defaults.plugins.legend.labels.boxHeight = Math.round(rem() * 0.7);
+  for (const c of [volumeChart, radarChart]) {
+    if (!c) continue;
+    if (c.config.type === "radar") c.options.scales.r.pointLabels.font = { size: Math.round(rem() * 0.75) };
+    c.options.plugins.legend.labels.boxWidth = c.options.plugins.legend.labels.boxHeight = Math.round(rem() * 0.7);
+    c.update("none");
+  }
+}
+
+// Diferença entre o relógio do servidor e o do browser: as idades contam-se
+// pelo servidor, que é quem sabe quando os dados foram lidos.
+let serverSkew = 0;
+let lastOk = null;
+let serverReachable = true;
+let apiState = "a_sincronizar";
+
+class NotSynced extends Error {}
+
+// A última resposta de cada endpoint fica no localStorage. Ao abrir a página
+// (um refresh, um hard refresh, a TV a ligar) desenha-se logo com ela, e
+// cada painel é substituído quando a resposta nova chega — em vez de ~0,3 s
+// de «–» e «A preparar…» (diagnóstico de 2026-09-30). O estado da API diz
+// de quando são os dados, por isso um valor guardado nunca passa por fresco.
+// O localStorage pode não existir ou estar cheio: tudo em try/catch.
+const CACHE_PREFIX = "ac360:";
+let fromCache = false;
+
+function cacheGet(path) {
+  try { return JSON.parse(localStorage.getItem(CACHE_PREFIX + path)); } catch { return null; }
+}
+function cachePut(path, data) {
+  try { localStorage.setItem(CACHE_PREFIX + path, JSON.stringify(data)); } catch { /* sem espaço: segue */ }
+}
+
+async function api(path) {
+  if (fromCache) {
+    const cached = cacheGet(path);
+    if (!cached) throw new NotSynced();  // nada guardado: fica o placeholder
+    $("demo-banner").hidden = !cached.demo;
+    return cached;
+  }
+  const r = await fetch(path, { cache: "no-store", credentials: "same-origin" });
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  const data = await r.json();
+  if (data.synced !== false) cachePut(path, data);
+  if (data.server_time) serverSkew = data.server_time - Date.now();
+  $("demo-banner").hidden = !data.demo;
+  // Sem primeira sincronização, os painéis ficam com o que tinham («–», «a
+  // aguardar») em vez de mostrarem zeros que ninguém mediu.
+  if (data.synced === false && !path.startsWith("/api/summary")) throw new NotSynced();
+  return data;
+}
+const now = () => Date.now() + serverSkew;
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function dash(s) { return s ? esc(s) : '<span class="muted">—</span>'; }
+
+function age(ms) {
+  if (!ms) return "—";
+  const m = Math.max(0, Math.floor((now() - ms) / 60_000));
+  if (m < 60) return `${m} min`;
+  if (m < 48 * 60) return `${Math.floor(m / 60)} h`;
+  return `${Math.floor(m / 1440)} d`;
+}
+function sevDot(sev) {
+  const s = SEV[sev];
+  if (!s) return '<span class="sev-dot" style="--c:var(--ink-3)" title="Informativo"></span>';
+  return `<span class="sev-dot" style="--c:${s.color}" title="${s.label}" aria-label="${s.label}"></span>`;
+}
+function tech(id, name) {
+  if (!id && !name) return '<span class="muted">—</span>';
+  return `<span class="tech-id">${esc(id)}</span> ${esc(name)}`;
+}
+
+/* ---------------- relógio ---------------- */
+
+const fmtTime = new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+// Data por extenso numa só linha (pedido do Miguel, 2026-09-30). Não cabe
+// com o título numa linha a 1080p: é o título que parte em duas (ver .brand).
+const fmtWeekday = new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, weekday: "long" });
+const fmtDate = new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, day: "numeric", month: "long", year: "numeric" });
+const fmtHM = new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+
+function tzLabel(d) {
+  // O desvio calcula-se a cada tique: acerta sozinho na mudança de hora
+  // (UTC−1 no inverno, UTC+0 no verão) sem código para isso.
+  const part = new Intl.DateTimeFormat("en-US", { timeZone: TZ, timeZoneName: "shortOffset" })
+    .formatToParts(d).find((p) => p.type === "timeZoneName")?.value || "GMT";
+  const off = part.replace("GMT", "");
+  return "UTC" + (off ? off.replace("-", "−") : "+0");
+}
+
+function tick() {
+  const d = new Date(now());
+  $("clock-time").textContent = fmtTime.format(d);
+  $("clock-tz").textContent = tzLabel(d);
+  const wd = fmtWeekday.format(d);
+  $("clock-date").textContent = `${wd.charAt(0).toUpperCase() + wd.slice(1)}, ${fmtDate.format(d)}`;
+  renderApiStatus();
+}
+
+/* ---------------- estado da API ---------------- */
+
+const STATE_TEXT = {
+  operacional: "Operacional", degradado: "Degradado",
+  sem_ligacao: "Sem ligação", a_sincronizar: "A sincronizar…",
+};
+
+function renderApiStatus() {
+  let state = apiState;
+  // O estado recalcula-se aqui também pela idade: se o servidor deixar de
+  // responder, o último «operacional» que ele disse não pode ficar no ecrã.
+  if (!serverReachable) state = "sem_ligacao";
+  else if (state === "operacional" && lastOk && now() - lastOk > STALE_MS) state = "degradado";
+  $("api-status").dataset.state = state;
+  $("api-state").textContent = !serverReachable ? "Servidor inacessível" : STATE_TEXT[state] || state;
+  $("api-last").textContent = "Última vez: " + (lastOk ? (age(lastOk) === "0 min" ? "agora" : "há " + age(lastOk)) : "—");
+}
+
+/* ---------------- cabeçalho ---------------- */
+
+async function loadSummary() {
+  const d = await api("/api/summary");
+  applyStatus(d.status);
+  if (!d.synced) return;
+  for (const s of Object.keys(SEV)) $("k-" + s).textContent = nf(d.severity[s]);
+  // Auto contido e MTTR vêm das métricas XQL: «–» até à 1.ª consulta chegar.
+  $("k-contained").textContent = nf(d.prevention.auto_contained);
+  $("k-malware").textContent = nf(d.prevention.threats_blocked);
+  const m = d.mttr;
+  const hours = m.ready && m.minutes >= 120;
+  $("k-mttr").textContent = !m.ready ? "–" : hours
+    ? (m.minutes / 60).toLocaleString("pt-PT", { maximumFractionDigits: 1 }) : nf(m.minutes);
+  $("k-mttr-unit").textContent = hours ? " h" : " min";
+  $("k-mttr-sub").textContent = m.ready ? `${m.period} · ${nf(m.n)} caso${m.n === 1 ? "" : "s"}` : "a carregar…";
+}
+
+function applyStatus(st) {
+  apiState = st.state;
+  lastOk = st.last_ok;
+  const bits = [];
+  if (st.error) bits.push(`Último erro: ${st.error.message}`);
+  bits.push(...(st.warnings || []));
+  $("api-status").title = bits.join("\n") || "Sincronização sem erros";
+  $("foot-sync").textContent = st.error ? `⚠ ${st.error.message}` : (st.warnings || []).join(" · ");
+  renderApiStatus();
+}
+
+/* ---------------- volume ---------------- */
+
+let volumeChart = null;
+let volumeRange = "7d";
+
+const gridColor = v("--grid");
+const inkColor = v("--ink-2");
+
+async function loadVolume() {
+  const d = await api(`/api/incidents?range=${volumeRange}`);
+  warn("volume-warn", d);
+  const labels = d.buckets.map((b) => b.label);
+  // Hoje (ou «agora», em 24h) ainda está a decorrer: o último troço vai a
+  // tracejado e o último ponto vazio, para a descida não parecer uma quebra.
+  volumePartial = d.buckets.findIndex((b) => b.partial);
+  const surface = v("--surface");
+  const datasets = SEV_ORDER.map((s) => ({
+    label: SEV[s].label,
+    data: d.buckets.map((b) => b[s]),
+    borderColor: SEV[s].color,
+    backgroundColor: SEV[s].color,
+    borderWidth: 2,
+    tension: 0.2,
+    fill: false,
+    pointRadius: d.buckets.map((b) => (b.partial ? rem() * 0.35 : d.buckets.length > 31 ? 0 : rem() * 0.2)),
+    pointHoverRadius: rem() * 0.4,
+    pointBackgroundColor: d.buckets.map((b) => (b.partial ? surface : SEV[s].color)),
+    pointBorderColor: SEV[s].color,
+    pointBorderWidth: 2,
+    segment: { borderDash: (ctx) => (ctx.p1DataIndex === volumePartial ? [6, 5] : undefined) },
+    // «Médio» começa escondido: no GRA é 97–99% dos casos (NGFW resolvido
+    // automaticamente) e deixava as outras séries esmagadas junto ao zero.
+    // Decidido pelo Miguel a 2026-09-30.
+    hidden: s === "medium",
+  }));
+  volumeMediumTotal = d.buckets.reduce((a, b) => a + b.medium, 0);
+  if (!volumeChart) {
+    volumeChart = new Chart($("volume-chart"), {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: inkColor, autoSkip: true, maxRotation: 0 } },
+          y: { beginAtZero: true, grid: { color: gridColor }, border: { display: false },
+               ticks: { color: inkColor, precision: 0 } },
+        },
+        plugins: {
+          legend: { position: "top", align: "end", reverse: true,
+                    onClick: (e, item, legend) => {
+                      Chart.defaults.plugins.legend.onClick.call(legend, e, item, legend);
+                      renderVolumeNote();
+                    },
+                    labels: { color: inkColor, boxWidth: Math.round(rem() * 0.7), boxHeight: Math.round(rem() * 0.7), usePointStyle: true, pointStyle: "rectRounded" } },
+          tooltip: { reverse: true, callbacks: {
+            // O total conta as quatro severidades, mesmo as escondidas: um
+            // total sem os «Médio» passava por total do dia.
+            footer: (items) => "Total (todas): " + nf(volumeChart.data.datasets
+              .reduce((a, ds) => a + ds.data[items[0].dataIndex], 0)),
+          } },
+        },
+      },
+    });
+  } else {
+    // Atualiza-se campo a campo, sem trocar os datasets: é o que faz a
+    // escolha feita na legenda (mostrar/esconder) sobreviver ao refresh.
+    volumeChart.data.labels = labels;
+    volumeChart.data.datasets.forEach((ds, i) => {
+      for (const k of ["data", "pointRadius", "pointBackgroundColor"]) ds[k] = datasets[i][k];
+    });
+    volumeChart.update();
+  }
+  renderVolumeNote();
+}
+
+let volumeMediumTotal = 0;
+let volumePartial = -1;
+function renderVolumeNote() {
+  const mediumIdx = SEV_ORDER.indexOf("medium");
+  const hidden = volumeChart && !volumeChart.isDatasetVisible(mediumIdx);
+  $("volume-note").hidden = !hidden;
+  $("volume-note").textContent = `Médio oculto · ${nf(volumeMediumTotal)} casos no período`;
+}
+
+document.querySelectorAll(".seg button").forEach((b) =>
+  b.addEventListener("click", () => {
+    volumeRange = b.dataset.range;
+    document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+    loadVolume().catch(fail);
+  }));
+
+/* ---------------- pausa ao passar o rato ---------------- */
+
+// Num monitor de parede o ponteiro fica parado onde alguém o deixou. Se
+// ficar em cima de um painel, «pausa ao passar o rato» era pausa para
+// sempre — a tabela deixava de andar sem erro nenhum. A pausa dura por isso
+// só enquanto o rato se mexe: 30 s parado e retoma. Uma linha aberta segura
+// o painel 2 min e depois fecha-se sozinha.
+const IDLE_MS = 30_000;
+const PIN_MS = 120_000;
+let lastMouseMove = 0;
+document.addEventListener("mousemove", () => {
+  lastMouseMove = Date.now();
+  document.body.classList.remove("idle-cursor");
+});
+setInterval(() => {
+  if (Date.now() - lastMouseMove > IDLE_MS) document.body.classList.add("idle-cursor");
+}, 5_000);
+
+function hoverPause(panel, onUnpin) {
+  let hovering = false;
+  let pinnedAt = 0;
+  panel.addEventListener("mouseenter", () => (hovering = true));
+  panel.addEventListener("mouseleave", () => (hovering = false));
+  return {
+    get paused() {
+      if (pinnedAt && Date.now() - pinnedAt > PIN_MS) {
+        pinnedAt = 0;
+        if (onUnpin) onUnpin();
+      }
+      return (hovering && Date.now() - lastMouseMove < IDLE_MS) || pinnedAt > 0;
+    },
+    pin(v) { pinnedAt = v ? Date.now() : 0; },
+  };
+}
+
+/* ---------------- scroll contínuo ---------------- */
+
+// A lista desliza devagar, sem saltos, como um teleponto: uma linha a cada
+// SECONDS_PER_ROW, portanto uma volta dura «linhas × 4 s» — a duração segue o
+// número de linhas em vez de ser fixa. Para a volta não dar um salto, o bloco
+// é duplicado logo a seguir ao original (outro <tbody>, ou outra grelha): no
+// fim de uma volta o que se vê é igual ao início. Se a lista cabe, não mexe.
+//
+// É uma animação do browser (Web Animations API), e não um ciclo em JS a
+// mudar o transform: a versão em JS recalculava estilos 60 vezes por segundo
+// no main thread (301 «Recalculate Style» em 5 s, medido a 2026-09-30) e
+// qualquer trabalho da página — um refresh, um gráfico — atrasava um frame e
+// a lista engasgava. Assim a animação corre no compositor.
+//
+// Com dados novos, a animação é refeita a partir da mesma posição em px, não
+// do início.
+const SECONDS_PER_ROW = 4;
+
+function scroller(view, block, pause) {
+  const track = view.querySelector(".scroll-track");
+  let clone = null;
+  let anim = null;
+  let loop = 0;  // altura de uma volta, em px
+
+  function position() {
+    if (!anim || !loop) return 0;
+    const d = anim.effect.getTiming().duration;
+    return ((anim.currentTime || 0) % d) / d * loop;
+  }
+
+  function measure() {
+    const px = position();
+    if (anim) { anim.cancel(); anim = null; }
+    if (clone) { clone.remove(); clone = null; }
+    view.classList.remove("scrolling");
+    loop = 0;
+    if (!view.clientHeight || block.getBoundingClientRect().height <= view.clientHeight + 1) return;
+    view.classList.add("scrolling");
+    clone = block.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.setAttribute("aria-hidden", "true");
+    block.after(clone);
+    loop = clone.getBoundingClientRect().top - block.getBoundingClientRect().top;
+    const rows = block.querySelectorAll("tr, .tac").length || 1;
+    const duration = rows * SECONDS_PER_ROW * 1000;
+    anim = track.animate(
+      [{ transform: "translate3d(0, 0, 0)" }, { transform: `translate3d(0, ${-loop}px, 0)` }],
+      { duration, iterations: Infinity, easing: "linear" });
+    anim.currentTime = (px % loop) / loop * duration;
+    if (pause.paused) anim.pause();
+  }
+
+  // A pausa só se consulta 4 vezes por segundo, e só se mexe na animação
+  // quando o estado muda — nada corre por frame.
+  setInterval(() => {
+    if (!anim) return;
+    const hidden = !view.offsetParent;  // vista escondida (MITRE): não gasta
+    if ((pause.paused || hidden) && anim.playState === "running") anim.pause();
+    else if (!pause.paused && !hidden && anim.playState === "paused") anim.play();
+  }, 250);
+
+  return {
+    // Troca o conteúdo mantendo a posição.
+    render(html) { block.innerHTML = html; measure(); },
+    measure,
+  };
+}
+
+/* ---------------- casos ---------------- */
+
+let cases = [];
+let openCase = null;
+const casesPause = hoverPause($("cases-panel"), () => { openCase = null; renderCases(); });
+const casesScroll = scroller($("cases-view"), $("cases-body"), casesPause);
+setInterval(() => {
+  const hide = !casesPause.paused;
+  if ($("cases-paused").hidden !== hide) $("cases-paused").hidden = hide;
+}, 500);
+
+async function loadCases() {
+  const d = await api("/api/cases");
+  cases = d.cases;
+  const openTotal = d.open_total ?? cases.length;
+  $("cases-count").textContent = `· ${openTotal.toLocaleString("pt-PT")} abertos`
+    + (openTotal > cases.length ? ` · os ${cases.length} mais graves` : "");
+  renderCases();
+}
+
+function renderCases() {
+  if (!cases.length) {
+    casesScroll.render('<tr><td colspan="8" class="empty">Sem casos abertos.</td></tr>');
+    return;
+  }
+  casesScroll.render(cases.map((c) => {
+    const isOpen = openCase === c.id;
+    let html = `<tr class="case${isOpen ? " open" : ""}" data-id="${esc(c.id)}">
+      <td>${sevDot(c.severity)}</td>
+      <td title="${esc(c.name)}"><span class="id">#${esc(c.id)}</span> ${esc(c.name)}</td>
+      <td title="${esc(c.host)}">${dash(c.host)}</td>
+      <td title="${esc(c.user)}">${dash(c.user)}</td>
+      <td>${dash(c.detection)}</td>
+      <td title="${esc(c.technique_id + " " + c.technique)}">${c.enriched ? tech(c.technique_id, c.technique) : '<span class="muted">a carregar…</span>'}</td>
+      <td class="num">${age(c.created)}</td>
+      <td>${esc(c.status)}</td></tr>`;
+    if (isOpen) {
+      const d = c.details;
+      const item = (label, list) => `<dt>${label}</dt><dd>${list && list.length ? list.map(esc).join(", ") : "—"}</dd>`;
+      html += `<tr class="detail"><td></td><td colspan="7"><dl>
+        ${item("IPs", d.ips)}${item("Ficheiros", d.files)}${item("Destinos", d.destinations)}
+        ${item("Issues", d.issue_ids)}
+        ${d.url ? `<dt>XSIAM</dt><dd><a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--accent)">abrir o caso</a></dd>` : ""}
+      </dl></td></tr>`;
+    }
+    return html;
+  }).join(""));
+}
+
+// No <table> e não no <tbody>: a cópia que dá a volta ao scroll também
+// tem de responder ao clique.
+$("cases-table").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.case");
+  if (!tr) return;
+  openCase = openCase === tr.dataset.id ? null : tr.dataset.id;
+  casesPause.pin(openCase !== null);
+  renderCases();
+});
+
+/* ---------------- MITRE ---------------- */
+
+// A alternância Táticas ↔ Top técnicas mantém-se a cada 20 s; dentro de cada
+// vista, a lista desliza se não couber.
+let mitreView = "tactics";
+const mitrePause = hoverPause($("mitre-panel"));
+const tacticsScroll = scroller($("mitre-tactics-view"), $("mitre-tactics"), mitrePause);
+const techniquesScroll = scroller($("mitre-techniques-view"), $("mitre-techniques-body"), mitrePause);
+setInterval(() => {
+  if (!mitrePause.paused) showMitre(mitreView === "tactics" ? "techniques" : "tactics");
+}, MITRE_ROTATE_MS);
+
+function showMitre(view) {
+  mitreView = view;
+  $("mitre-tactics-view").hidden = view !== "tactics";
+  $("mitre-techniques").hidden = view !== "techniques";
+  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+  // Uma vista escondida mede 0: só ao aparecer se sabe se precisa de deslizar.
+  (view === "tactics" ? tacticsScroll : techniquesScroll).measure();
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showMitre(b.dataset.view)));
+
+async function loadMitre() {
+  const d = await api("/api/mitre");
+  $("mitre-period").textContent = "· " + d.period;
+  warn("mitre-warn", d);
+  // Todas as barras partilham a mesma escala (o máximo) e a mesma linha de
+  // base: comparam-se a olho entre si, que é para isso que lá estão.
+  const max = Math.max(1, ...d.tactics.map((t) => t.count));
+  tacticsScroll.render(d.tactics.map((t) => `
+    <div class="tac${t.count ? "" : " zero"}" title="${esc(t.id)} · ${t.count} casos">
+      <span class="tac-name">${esc(t.name)}</span>
+      <span class="tac-bar"><span style="width:${(t.count / max) * 100}%"></span></span>
+      <span class="tac-count">${t.count}</span>
+    </div>`).join(""));
+  techniquesScroll.render(d.techniques.length
+    ? d.techniques.map((t, i) => `<tr><td class="num muted">${i + 1}</td><td class="tech-id">${esc(t.id)}</td>
+        <td title="${esc(t.name)}">${esc(t.name)}</td><td class="num">${t.count}</td></tr>`).join("")
+    : '<tr><td colspan="4" class="empty">Sem técnicas MITRE nos casos deste período.</td></tr>');
+}
+
+/* ---------------- alertas mais críticos ---------------- */
+
+async function loadTop() {
+  const d = await api("/api/top-alerts");
+  $("top-body").innerHTML = d.alerts.length
+    ? d.alerts.map((a) => `<tr>
+        <td>${sevDot(a.severity)}</td>
+        <td class="id">${esc(a.id)}</td>
+        <td title="${esc(a.name)}${a.count > 1 ? ` — ${a.count} vezes nas últimas 24h` : ""}">${a.count > 1 ? `<span class="rep">×${nf(a.count)}</span> ` : ""}${esc(a.name)}</td>
+        <td title="${esc([a.host, a.user].filter(Boolean).join(" · "))}">${dash([a.host, a.user].filter(Boolean).join(" · "))}</td>
+        <td title="${esc(a.technique)}">${a.technique_id ? `<span class="tech-id">${esc(a.technique_id)}</span>` : '<span class="muted">—</span>'}</td>
+        <td class="num">${age(a.created)}</td></tr>`).join("")
+    : '<tr><td colspan="6" class="empty">Sem alertas nas últimas 24h.</td></tr>';
+}
+
+/* ---------------- radar ---------------- */
+
+let radarChart = null;
+
+async function loadRadar() {
+  const d = await api("/api/radar");
+  const labels = d.axes.map((a) => a.name);
+  const today = d.axes.map((a) => a.today);
+  const avg = d.axes.map((a) => a.avg7d);
+  const cToday = v("--sev-high");
+  const cAvg = v("--ink-3");
+  if (!radarChart) {
+    radarChart = new Chart($("radar-chart"), {
+      type: "radar",
+      data: { labels, datasets: [
+        { label: "Média 7 dias", data: avg, borderColor: cAvg, backgroundColor: cAvg + "33", borderWidth: 2, borderDash: [5, 4], pointRadius: 2 },
+        { label: "Hoje (parcial)", data: today, borderColor: cToday, backgroundColor: cToday + "40", borderWidth: 2, pointRadius: 3, pointBackgroundColor: cToday },
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+        scales: { r: { beginAtZero: true, angleLines: { color: gridColor }, grid: { color: gridColor },
+                       pointLabels: { color: inkColor, font: { size: Math.round(rem() * 0.75) } },
+                       ticks: { display: false, precision: 0 } } },
+        plugins: { legend: { position: "bottom", labels: { color: inkColor, boxWidth: Math.round(rem() * 0.7), boxHeight: Math.round(rem() * 0.7) } } },
+      },
+    });
+  } else {
+    radarChart.data.datasets[0].data = avg;
+    radarChart.data.datasets[1].data = today;
+    radarChart.update();
+  }
+  const h = d.highlight;
+  radarChart.data.datasets[0].label = d.incomplete ? "Média 7 dias (a carregar)" : "Média 7 dias";
+  if (!h) {
+    $("radar-note").innerHTML = '<span class="muted">Sem casos com tática MITRE hoje.</span>';
+  } else {
+    const ch = h.change_pct;
+    const chTxt = ch === null ? "sem casos ontem"
+      : `<span class="${ch >= 0 ? "up" : "down"}">${ch >= 0 ? "▲ +" : "▼ "}${ch}%</span> face a ontem (${h.yesterday})`;
+    $("radar-note").innerHTML = `Tática mais ativa hoje<strong>${esc(h.name)}</strong>${h.today} casos · ${chTxt}`;
+  }
+}
+
+/* ---------------- briefing ---------------- */
+
+async function loadBriefing() {
+  const d = await api("/api/briefing");
+  if (!d.texto) return; // ainda não gerado: fica o «A preparar…»
+  $("brief-lines").innerHTML = d.texto.split("\n").map((l) => `<li>${esc(l)}</li>`).join("");
+  const src = d.fonte === "regras" ? "por regras" : `por ${esc(d.fonte)}`;
+  // A hora vem do próprio gerado_em (hora dos Açores): 09:00, 10:00…
+  $("brief-meta").innerHTML = `gerado às ${esc(d.gerado_em.slice(11, 16))} · ${src}`
+    + (d.nota ? ` <span class="warn" title="${esc(d.nota)}">${d.fonte === "regras" ? "modelo falhou" : "desatualizado"}</span>` : "");
+}
+
+/* ---------------- ciclo ---------------- */
+
+// Um só aviso por painel, e o de histórico a carregar tem prioridade: explica
+// porque é que as barras antigas estão vazias.
+function warn(id, d) {
+  const el = $(id);
+  el.textContent = d.incomplete ? "a carregar…" : "dados truncados";
+  el.hidden = !(d.incomplete || d.truncated);
+}
+
+function fail(err) { if (!(err instanceof NotSynced)) console.error(err); }
+
+async function refreshAll() {
+  const results = await Promise.allSettled([
+    loadSummary(), loadVolume(), loadCases(), loadMitre(), loadTop(), loadRadar(), loadBriefing(),
+  ]);
+  // Se nenhum pedido chegou ao servidor, é o servidor que está em baixo — não
+  // o XSIAM — e o ecrã tem de o dizer em vez de mostrar os números antigos
+  // com a bolinha verde.
+  serverReachable = results.some((r) => r.status === "fulfilled" || r.reason instanceof NotSynced);
+  results.filter((r) => r.status === "rejected").forEach((r) => fail(r.reason));
+  renderApiStatus();
+}
+
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    scaleCharts();
+    casesScroll.measure();
+    (mitreView === "tactics" ? tacticsScroll : techniquesScroll).measure();
+  }, 200);
+});
+
+async function boot() {
+  // Primeiro o que ficou guardado (instantâneo), depois o servidor.
+  fromCache = true;
+  await refreshAll();
+  fromCache = false;
+  await refreshAll();
+  setInterval(refreshAll, REFRESH_MS);
+}
+
+scaleCharts();
+tick();
+setInterval(tick, 1000);
+boot();
