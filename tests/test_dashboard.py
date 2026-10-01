@@ -93,6 +93,14 @@ def test_tabela_ordena_por_severidade_e_depois_recencia():
     assert [r["id"] for r in agg.case_rows(incs, {}, SUMMER, 60)] == ["3", "2", "1"]
 
 
+def test_tabela_so_mostra_casos_dos_ultimos_3_dias():
+    # Um crítico de há 4 dias tapava os de hoje na tabela, que mostra os mais
+    # graves primeiro; fica de fora (mas continua nos contadores dos 90 dias).
+    incs = [inc(1, "critical", created=SUMMER - 4 * agg.DAY), inc(2, "low", created=SUMMER - 2 * agg.DAY),
+            inc(3, "high", created=SUMMER - 3 * agg.DAY)]
+    assert [r["id"] for r in agg.case_rows(incs, {}, SUMMER, 60)] == ["3", "2"]
+
+
 # --- sincronização ------------------------------------------------------------
 
 def sync_all(s):
@@ -445,6 +453,35 @@ def test_primeira_falha_sem_anterior_usa_regras():
     b.generate(inc_, al, m, SUMMER)
     p = b.payload()
     assert p["fonte"] == "regras" and p["texto"]
+
+
+def test_falha_do_ollama_diz_no_ecra_o_motivo_e_o_que_fazer():
+    # No PC da TV ninguém lê o log: o motivo tem de vir na nota do endpoint.
+    import requests
+    inc_, al, m = demo_state()
+    b = brf.Briefing("http://localhost:11434", "llama3.2:3b", timeout=120)
+    def sem_ollama(prompt):
+        raise requests.ConnectionError("recusada")
+    b._ollama = sem_ollama
+    assert b.generate(inc_, al, m, SUMMER) is False
+    assert "não responde em http://localhost:11434" in b.payload()["nota"]
+
+    def lento(prompt):
+        raise requests.ReadTimeout()
+    b._ollama = lento
+    b.generate(inc_, al, m, SUMMER + agg.HOUR)
+    p = b.payload()
+    # Continua por regras, refeito com a hora nova, e o motivo é o último.
+    assert p["fonte"] == "regras" and p["gerado_em"].startswith("2026-07-15T13:00")
+    assert "120 s" in p["nota"] and "OLLAMA_TIMEOUT" in p["nota"]
+
+    resp = requests.Response(); resp.status_code = 404
+    assert "ollama pull llama3.2:3b" in brf.motivo(requests.HTTPError(response=resp),
+                                                   "http://x", "llama3.2:3b", 120)
+
+    b._ollama = lambda prompt: "Ponto bom"
+    assert b.generate(inc_, al, m, SUMMER + 2 * agg.HOUR) is True
+    assert b.payload()["nota"] is None
 
 
 def test_endpoint_briefing_nunca_chama_o_ollama(client, monkeypatch):

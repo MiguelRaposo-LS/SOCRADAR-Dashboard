@@ -255,6 +255,19 @@ def open_by_priority(incidents: list[dict]) -> list[dict]:
     return sorted((i for i in incidents if is_open(i)), key=_priority_key, reverse=True)
 
 
+# A tabela «Casos» mostra só os abertos criados nos últimos 3 dias (pedido do
+# Miguel, 2026-10-01): com os 90 dias da recolha, os mais graves eram casos de
+# semanas atrás e os de hoje não chegavam ao ecrã. Os contadores e o briefing
+# continuam com os 90 dias.
+CASES_WINDOW_MS = 3 * DAY
+
+
+def table_cases(incidents: list[dict], now: int) -> list[dict]:
+    """Os casos da tabela, pela ordem em que aparecem: abertos, dos últimos
+    3 dias, mais graves e mais recentes primeiro."""
+    return [i for i in open_by_priority(incidents) if (i["created"] or 0) >= now - CASES_WINDOW_MS]
+
+
 def _entity(values: list[str]) -> str | None:
     if not values:
         return None
@@ -274,7 +287,7 @@ def case_rows(incidents: list[dict], extra: dict, now: int, limit: int,
         if a["case_id"] not in (None, ""):
             by_case.setdefault(str(a["case_id"]), []).append(a)
     rows = []
-    for inc in open_by_priority(incidents)[:limit]:
+    for inc in table_cases(incidents, now)[:limit]:
         data = extra.get(inc["id"]) or {}
         alerts = [norm_alert(a) for a in ((data.get("alerts") or {}).get("data") or [])
                   if isinstance(a, dict)]

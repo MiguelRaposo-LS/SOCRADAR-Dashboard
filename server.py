@@ -67,7 +67,7 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
                   max_alert_pages=int(os.environ.get("MAX_ALERT_PAGES", 300)))
     brief = Briefing(os.environ.get("OLLAMA_URL") or "http://localhost:11434",
                      os.environ.get("OLLAMA_MODEL") or "llama3.2:3b",
-                     timeout=int(os.environ.get("OLLAMA_TIMEOUT", 30)))
+                     timeout=int(os.environ.get("OLLAMA_TIMEOUT", 120)))
     top_n = int(os.environ.get("TOP_ALERTS", 10))
 
     app = Flask(__name__, static_folder=None)
@@ -159,7 +159,8 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
         with store.lock:
             denied = set(store.denied)
         return jsonify(meta({"cases": agg.case_rows(inc, extra, now_ms(), store.cases_limit, al, denied),
-                             "open_total": sum(1 for i in inc if agg.is_open(i)),
+                             "open_total": len(agg.table_cases(inc, now_ms())),
+                             "window_days": agg.CASES_WINDOW_MS // agg.DAY,
                              "truncated": store.status()["truncated"]["incidents"]}))
 
     @app.get("/api/mitre")
@@ -269,7 +270,7 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
             def generate():
                 inc, al, _ = store.snapshot()
                 m, _ = store.metrics_snapshot()
-                brief.generate(inc, al, m, now_ms())
+                return brief.generate(inc, al, m, now_ms())
 
             # No arranque, sem esperar pela hora certa — senão o painel ficava
             # vazio até lá. Mas só com a recolha inicial completa: com os
@@ -279,14 +280,20 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
             # do disco é de antes do reinício.
             while not (store.fresh and store.stages == [] and store.metrics_snapshot()[0]):
                 time.sleep(5)
-            generate()
+            ok = generate()
             while True:
                 # À hora certa dos Açores (08:00, 09:00…), e não 60 min depois
                 # da última: o «gerado às» fica sempre em horas redondas.
                 now = datetime.now(agg.TZ)
                 nxt = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+                # Depois de uma falha, outra vez daqui a 5 min, sem esperar
+                # pela hora. No Windows o Ollama só arranca quando alguém
+                # inicia sessão — depois do serviço —, e o briefing ficava
+                # «por regras» até à hora seguinte.
+                if not ok:
+                    nxt = min(nxt, now + timedelta(minutes=5))
                 time.sleep(max(1, (nxt - datetime.now(agg.TZ)).total_seconds()))
-                generate()
+                ok = generate()
 
         threading.Thread(target=briefing_loop, name="briefing", daemon=True).start()
 

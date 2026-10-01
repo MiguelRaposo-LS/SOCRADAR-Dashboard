@@ -165,8 +165,21 @@ def _why(exc: Exception) -> str:
     return str(exc) if isinstance(exc, ValueError) else type(exc).__name__
 
 
+def motivo(exc: Exception, url: str, model: str, timeout: int) -> str:
+    """O motivo para o ecrã, em português e com o que fazer. No PC da TV não
+    há quem leia o log: «modelo falhou» sozinho não dizia por onde pegar."""
+    if isinstance(exc, requests.Timeout):
+        return (f"o modelo demorou mais de {timeout} s a responder — sem GPU é normal; "
+                "aumentar OLLAMA_TIMEOUT no .env")
+    if isinstance(exc, requests.ConnectionError):
+        return f"o Ollama não responde em {url} — está instalado e a correr? (OLLAMA_URL no .env)"
+    if isinstance(exc, requests.HTTPError) and exc.response is not None and exc.response.status_code == 404:
+        return f"o modelo {model} não está no Ollama — correr: ollama pull {model}"
+    return _why(exc)
+
+
 class Briefing:
-    def __init__(self, url: str, model: str, timeout: int = 30):
+    def __init__(self, url: str, model: str, timeout: int = 120):
         self.url = url.rstrip("/")
         self.model = model
         self.timeout = timeout
@@ -184,7 +197,9 @@ class Briefing:
         r.raise_for_status()
         return r.json()["message"]["content"].strip()
 
-    def generate(self, incidents, alerts, metrics, now: int) -> None:
+    def generate(self, incidents, alerts, metrics, now: int) -> bool:
+        """Gera o briefing; devolve False se o modelo falhou (para se tentar
+        outra vez mais cedo)."""
         f = facts(incidents, alerts, metrics, now)
         prompt = format_facts(f)
         try:
@@ -197,18 +212,22 @@ class Briefing:
                 raise ValueError("resposta vazia")
         except Exception as exc:  # noqa: BLE001 — o briefing nunca derruba nada
             with self.lock:
-                first = self.current is None
+                first = self.current is None or self.current["source"] == "regras"
+                why = motivo(exc, self.url, self.model, self.timeout)
                 if first:
+                    # Também quando o que lá está já é por regras: refaz-se com
+                    # os números de agora, em vez de ficar o texto do arranque.
                     self.current = {"lines": rule_based(f), "generated_at": now, "source": "regras",
-                                    "note": f"o modelo falhou ({type(exc).__name__}); texto por regras"}
+                                    "note": f"modelo falhou: {why}"}
                 else:
-                    self.current["note"] = f"a última geração falhou ({type(exc).__name__}); texto de antes"
+                    self.current["note"] = f"a última geração falhou: {why}"
             log.warning("Briefing: o Ollama (%s em %s) falhou: %s — %s.", self.model, self.url,
                         _why(exc), "texto por regras" if first else "fica o anterior")
-            return
+            return False
         with self.lock:
             self.current = {"lines": lines, "generated_at": now, "source": self.model, "note": None}
         log.info("Briefing gerado por %s (%d linhas).", self.model, len(lines))
+        return True
 
     def save(self, path) -> None:
         import json, os

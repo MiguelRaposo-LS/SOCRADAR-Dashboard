@@ -305,7 +305,9 @@ class Store:
         o caso mudou desde a última vez, e no máximo `extra_per_cycle` por ciclo
         para não rebentar o limite de pedidos da API."""
         with self.lock:
-            wanted = agg.open_by_priority(list(self.incidents.values()))[:self.cases_limit]
+            # Os mesmos que a tabela mostra (agg.table_cases): enriquecer outros gastava
+            # pedidos em casos que não aparecem.
+            wanted = agg.table_cases(list(self.incidents.values()), now_ms())[:self.cases_limit]
             todo = [i for i in wanted
                     if (i["id"] not in self.extra or self.extra[i["id"]][0] != i["modified"])
                     and self.denied.get(i["id"], object()) != i["modified"]]

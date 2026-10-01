@@ -234,8 +234,20 @@ if ($faltam.Count -gt 0) {
     Start-Process notepad.exe -ArgumentList "`"$envFile`"" -Wait
     $faltam = @($credenciais | Where-Object { -not (Ler-Env $_) })
 }
-if ((Ler-Env 'OLLAMA_URL') -match 'localhost|127\.0\.0\.1') {
-    Aviso 'OLLAMA_URL aponta para este PC; o Ollama está no Lubuntu (http://<IP>:11434). Sem isso, o briefing fica «por regras».'
+# O briefing precisa do Ollama (neste PC ou no Lubuntu) com o modelo. Sem
+# ele o dashboard funciona, mas o briefing fica «por regras»: confirma-se já,
+# em vez de se descobrir na TV.
+$ollama = (Ler-Env 'OLLAMA_URL'); if (-not $ollama) { $ollama = 'http://localhost:11434' }
+$modelo = (Ler-Env 'OLLAMA_MODEL'); if (-not $modelo) { $modelo = 'llama3.2:3b' }
+try {
+    $tags = Invoke-RestMethod -TimeoutSec 5 "$($ollama.TrimEnd('/'))/api/tags"
+    if (@($tags.models | Where-Object { $_.name -eq $modelo -or $_.model -eq $modelo }).Count -eq 0) {
+        Aviso "O Ollama em $ollama responde, mas não tem o modelo $modelo. Correr: ollama pull $modelo"
+    } else {
+        Write-Host "   Ollama em $ollama com o modelo $modelo."
+    }
+} catch {
+    Aviso "O Ollama não responde em $ollama (OLLAMA_URL no .env). O briefing fica «por regras» até responder."
 }
 if ($faltam.Count -gt 0) {
     # Sem credenciais o servidor sai logo e o NSSM reiniciava-o de 5 em 5 s.

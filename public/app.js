@@ -448,7 +448,7 @@ async function loadCases() {
   const d = await api("/api/cases");
   cases = d.cases;
   const openTotal = d.open_total ?? cases.length;
-  $("cases-count").textContent = `· ${openTotal.toLocaleString("pt-PT")} abertos (90 dias)`
+  $("cases-count").textContent = `· ${openTotal.toLocaleString("pt-PT")} abertos (${d.window_days ?? 3} dias)`
     + (openTotal > cases.length ? ` · os ${cases.length} mais graves` : "");
   renderCases();
 }
@@ -545,6 +545,9 @@ async function loadBriefing() {
   // A hora vem do próprio gerado_em (hora dos Açores): 09:00, 10:00…
   $("brief-meta").innerHTML = `gerado às ${esc(d.gerado_em.slice(11, 16))} · ${src}`
     + (d.nota ? ` <span class="warn" title="${esc(d.nota)}">${d.fonte === "regras" ? "modelo falhou" : "desatualizado"}</span>` : "");
+  // O motivo por extenso, por baixo: na TV ninguém passa o rato por cima.
+  $("brief-nota").hidden = !d.nota;
+  $("brief-nota").textContent = d.nota ? `⚠ ${d.nota}` : "";
 }
 
 /* ---------------- ciclo ---------------- */

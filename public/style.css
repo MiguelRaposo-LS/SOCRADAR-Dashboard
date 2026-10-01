@@ -451,3 +451,6 @@ html.embed .cc-flow .cc-lbl { font-size: 20px; }
 html.embed .cc-flow .cc-src { font-size: 17px; }
 html.embed .cc-flow .cc-src-forte { font-size: 18px; }
 html.embed .cc-flow .cc-sevline { font-size: 18px; }
+
+/* Porque é que o briefing não veio do modelo, por extenso (ver app.js). */
+.brief-nota { margin: auto 0 0; padding-top: 0.4rem; font-size: .75rem; color: var(--degraded); line-height: 1.35; }

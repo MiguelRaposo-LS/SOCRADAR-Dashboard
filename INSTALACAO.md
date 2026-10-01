@@ -108,6 +108,20 @@ Tem de aparecer `llama3.2:3b`.
 
 ---
 
+### Alternativa: o Ollama no próprio PC Windows
+
+Se o Lubuntu não estiver sempre ligado, o Ollama pode correr no PC da TV:
+
+```powershell
+winget install -e --id Ollama.Ollama
+ollama pull llama3.2:3b
+```
+
+No `.env`: `OLLAMA_URL=http://localhost:11434` e `OLLAMA_TIMEOUT=120` (sem
+GPU, o i7 leva perto de um minuto por briefing). No Windows o Ollama arranca
+quando se inicia sessão, depois do serviço: o primeiro briefing sai «por
+regras» e o servidor volta a tentar de 5 em 5 min até o Ollama responder.
+
 ## 2. PC Windows: o dashboard
 
 ### 2.1 Python
@@ -297,8 +311,10 @@ Desligar e voltar a ligar o PC, sem tocar em nada:
 | Estado da API vermelho, log com `401` | a chave foi revogada ou regenerada na consola (o tipo errado já não dá 401: o servidor tenta o outro) |
 | Log com `acerta CORTEX_AUTH=…` | o tipo no `.env` está errado; funciona, mas corrigir o `.env` |
 | Estado da API vermelho, log com `Sem ligação` | o PC não chega à Internet ou ao tenant (proxy, firewall) |
-| Briefing «por regras», log com `model 'llama3.2:3b' not found` | falta o `ollama pull` no Lubuntu (1.1) |
-| Briefing «por regras», log com `ConnectionError` | `OLLAMA_URL` errado, Ollama só em `localhost` (1.2) ou firewall (1.3) |
+| Briefing com «⚠ modelo falhou: …» por baixo | o próprio aviso diz o motivo e o que fazer. Depois de uma falha, o servidor volta a tentar de 5 em 5 min |
+| «o modelo llama3.2:3b não está no Ollama» | falta o `ollama pull llama3.2:3b` na máquina do Ollama (1.1) |
+| «o Ollama não responde em …» | `OLLAMA_URL` errado, Ollama parado, Ollama só em `localhost` noutra máquina (1.2) ou firewall (1.3) |
+| «o modelo demorou mais de N s» | sem GPU é normal: subir `OLLAMA_TIMEOUT` no `.env` (o exemplo traz 120) e reiniciar o serviço |
 | A TV fica na janela de login | `DASHBOARD_LOCAL_NO_AUTH=1` em falta no `.env` |
 | O estado da API fica vermelho, «Servidor inacessível» (a página continua com os últimos dados) | o serviço parou: `nssm status AzoresCyber360` e o log |
 | A TV fica com uma janela preta ou do script, e o browser não abre | o serviço nunca respondeu: o script fica à espera. Ver `nssm status` e o log |
