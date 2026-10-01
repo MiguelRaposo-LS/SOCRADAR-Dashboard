@@ -62,6 +62,7 @@ const LIVRE_MS = 30_000;   // sem mexer este tempo, o globo volta à animação
 const TZ = "Atlantic/Azores";
 // Locais, e não do unpkg: a TV não tem de chegar à Internet para ver o globo.
 const TEXTURA_TERRA = "texturas/terra.jpg";
+const TEXTURA_NOITE = "texturas/noite.jpg";   // luzes das cidades (NASA Black Marble)
 
 // As mesmas cores de severidade do Azores Cyber 360.
 const SEV: Record<Sev, { hex: number; css: string; label: string }> = {
@@ -90,6 +91,23 @@ function latLngToVec3(lat: number, lng: number, r: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lng + 180) * (Math.PI / 180);
   return new THREE.Vector3(-r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+}
+
+// O ponto da Terra com o Sol a pique, agora: latitude = declinação do Sol,
+// longitude = onde é meio-dia solar. Aproximação de ~1° (medido contra
+// solstício e equinócio de 2026) — chega para a
+// linha entre o dia e a noite num globo deste tamanho.
+export function pontoSubsolar(ms: number): { lat: number; lng: number } {
+  const d = new Date(ms);
+  const inicio = Date.UTC(d.getUTCFullYear(), 0, 0);
+  const dia = (ms - inicio) / 86_400_000;                       // dia do ano, com fração
+  const decl = -23.44 * Math.cos((2 * Math.PI / 365) * (dia + 10));
+  const b = (2 * Math.PI * (dia - 81)) / 364;
+  const eqTempoMin = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+  const horasUTC = d.getUTCHours() + d.getUTCMinutes() / 60 + d.getUTCSeconds() / 3600;
+  let lng = -15 * (horasUTC - 12 + eqTempoMin / 60);
+  lng = ((lng + 540) % 360) - 180;
+  return { lat: decl, lng };
 }
 
 function makeArc(sp: THREE.Vector3, ep: THREE.Vector3): THREE.Vector3[] {
@@ -213,13 +231,47 @@ export default function DDoSMap() {
     renderer.setClearColor(0x000000, 0);
     c.appendChild(renderer.domElement);
 
-    const globeMat = new THREE.MeshPhongMaterial({ color: 0x1a3a5c, emissive: 0x041020, shininess: 15, transparent: true, opacity: 0.95 });
+    // Dia e noite: um shader mistura a textura do dia (iluminada pelo Sol) e
+    // a das luzes das cidades, pela posição real do Sol (pontoSubsolar), com
+    // uma transição suave no crepúsculo. Pedido do Miguel (2026-10-01).
+    const sol = new THREE.Vector3();
+    const atualizarSol = () => {
+      const p = pontoSubsolar(Date.now());
+      sol.copy(latLngToVec3(p.lat, p.lng, 1)).normalize();
+    };
+    atualizarSol();
+    const globeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        dia: { value: null }, noite: { value: null }, sol: { value: sol },
+        temDia: { value: 0 }, temNoite: { value: 0 },
+      },
+      vertexShader: `varying vec2 vUv; varying vec3 vN;
+        void main() { vUv = uv; vN = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform sampler2D dia; uniform sampler2D noite; uniform vec3 sol;
+        uniform float temDia; uniform float temNoite;
+        varying vec2 vUv; varying vec3 vN;
+        void main() {
+          float c = dot(normalize(vN), sol);
+          // Contraste forte (a primeira versão quase não se notava, 2026-10-01):
+          // noite escura e azulada, luzes das cidades acesas, passagem estreita.
+          // (Uma faixa dourada de crepúsculo a marcar a linha saiu: o Miguel não
+          // gostou.)
+          float luz = smoothstep(-0.05, 0.08, c);          // 0 noite, 1 dia
+          vec3 d = temDia > 0.5 ? texture2D(dia, vUv).rgb : vec3(0.10, 0.23, 0.36);
+          vec3 n = temNoite > 0.5 ? texture2D(noite, vUv).rgb : vec3(0.0);
+          vec3 corDia = d * (0.35 + 0.85 * pow(max(c, 0.0), 0.6));
+          vec3 luzes = n * n * vec3(1.9, 1.5, 0.9);            // ao quadrado: só as cidades, sem o véu
+          vec3 corNoite = d * vec3(0.03, 0.05, 0.10) + luzes;
+          gl_FragColor = vec4(mix(corNoite, corDia, luz), 1.0);
+        }`,
+    });
     scene.add(new THREE.Mesh(new THREE.SphereGeometry(2, 64, 64), globeMat));
-    new THREE.TextureLoader().load(TEXTURA_TERRA, (tex) => {
-      globeMat.map = tex;
-      globeMat.color.set(0xffffff);
-      globeMat.needsUpdate = true;
-    }, undefined, () => globeMat.color.set(0x0a1628));
+    const carregador = new THREE.TextureLoader();
+    carregador.load(TEXTURA_TERRA, (tex) => { globeMat.uniforms.dia.value = tex; globeMat.uniforms.temDia.value = 1; });
+    carregador.load(TEXTURA_NOITE, (tex) => { globeMat.uniforms.noite.value = tex; globeMat.uniforms.temNoite.value = 1; });
+    // O Sol anda 0,25° por minuto: atualizar a cada 30 s chega.
+    const solTimer = setInterval(atualizarSol, 30_000);
 
     scene.add(new THREE.Mesh(new THREE.SphereGeometry(2.005, 48, 24),
       new THREE.MeshBasicMaterial({ color: 0x0d4a6b, wireframe: true, transparent: true, opacity: 0.06 })));
@@ -365,6 +417,7 @@ export default function DDoSMap() {
     window.addEventListener("resize", onResize);
     return () => {
       cancelAnimationFrame(aId);
+      clearInterval(solTimer);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("mouseup", up);
       window.removeEventListener("touchend", up);
@@ -484,7 +537,7 @@ export default function DDoSMap() {
 
       <div style={{ ...st.bottomBar, ...z }}>
         <span>Fonte: Cloudflare (cloudflare_waf_raw) via Cortex XSIAM · pedidos bloqueados e desafiados à frente dos sites do GRA · destino nos Açores</span>
-        <span>Origem: cidade e coordenadas da própria Cloudflare · sem dados simulados</span>
+        <span>Origem: cidade e coordenadas da própria Cloudflare · dia e noite pela posição real do Sol · sem dados simulados</span>
       </div>
     </div>
   );
