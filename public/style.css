@@ -177,10 +177,10 @@ h1, h2 { margin: 0; font-weight: 600; }
   animation: radar-ping 3s linear infinite;
 }
 @keyframes radar-ping { 0% { opacity: 0; } 8% { opacity: 1; } 20% { opacity: 0; } 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .radar-varrimento, .radar-ponto { animation: none; }
-  .radar-ponto { opacity: .6; }
-}
+/* Sem «prefers-reduced-motion»: numa TV de parede ninguém o pediu, e o
+   Windows de empresa/VM/sessão remota liga-o por omissão («Efeitos de
+   animação» desligados) — o radar ficava parado no PC da TV. Quem desliga
+   as animações é o modo leve. */
 
 /* margin-left: auto divide o espaço livre em dois — metade antes das métricas
    (margem do título), metade antes da hora — e as métricas ficam ao centro, em
@@ -394,7 +394,6 @@ body.pagina-paineis { overflow: auto; height: auto; min-height: 100%; }
 .cc-anel { position: absolute; aspect-ratio: 1; height: auto; pointer-events: none;
   will-change: transform; animation: cc-girar 40s linear infinite; }
 @keyframes cc-girar { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .cc-anel { animation: none; } }
 .cc-faixa { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); margin-top: 0.4rem; padding-top: 0.8rem; }
 .cc-bloco { padding: 0 1.2rem; border-right: 1px solid rgba(255, 255, 255, 0.1); }
 .cc-bloco:last-child { border-right: 0; }

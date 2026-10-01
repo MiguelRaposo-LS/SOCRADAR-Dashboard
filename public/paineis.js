@@ -214,8 +214,10 @@ function startParticles(wrap) {
     for (let t = 0; t <= len; t += 2) { const q = p.getPointAtLength(t); pts.push(q.x, q.y); }
     return { pts, len, col: p.dataset.col, op: +p.dataset.op, w: +p.dataset.w, phase: +p.dataset.phase };
   });
-  // Modo leve ou movimento reduzido: as partículas desenham-se uma vez, paradas.
-  const reduce = LEVE || matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Modo leve: as partículas desenham-se uma vez, paradas. O «movimento
+  // reduzido» do sistema não conta: o Windows do PC da TV tinha-o ligado e
+  // as partículas não andavam (ver style.css, no radar).
+  const reduce = LEVE;
   // O tamanho só se lê quando muda: lê-lo em cada fotograma obrigava a um
   // recálculo de estilo por fotograma (301 em 5 s, medido).
   let W = 0, H = 0, k = 1;
