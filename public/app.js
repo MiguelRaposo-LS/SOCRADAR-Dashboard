@@ -5,7 +5,6 @@
 "use strict";
 
 const REFRESH_MS = 60_000;
-const MITRE_ROTATE_MS = 20_000;
 const STALE_MS = 10 * 60_000;
 const TZ = "Atlantic/Azores";
 
@@ -422,7 +421,7 @@ function scroller(view, block, pause) {
   }
   setInterval(() => {
     if (!anim) return;
-    const hidden = !view.offsetParent;  // vista escondida (MITRE): não gasta
+    const hidden = !view.offsetParent;  // vista escondida: não gasta
     if ((pause.paused || hidden) && anim.playState === "running") anim.pause();
     else if (!pause.paused && !hidden && anim.playState === "paused") anim.play();
   }, 250);
@@ -492,47 +491,6 @@ $("cases-table").addEventListener("click", (e) => {
   casesPause.pin(openCase !== null);
   renderCases();
 });
-
-/* ---------------- MITRE ---------------- */
-
-// A alternância Táticas ↔ Top técnicas mantém-se a cada 20 s; dentro de cada
-// vista, a lista desliza se não couber.
-let mitreView = "tactics";
-const mitrePause = hoverPause($("mitre-panel"));
-const tacticsScroll = scroller($("mitre-tactics-view"), $("mitre-tactics"), mitrePause);
-const techniquesScroll = scroller($("mitre-techniques-view"), $("mitre-techniques-body"), mitrePause);
-setInterval(() => {
-  if (!mitrePause.paused) showMitre(mitreView === "tactics" ? "techniques" : "tactics");
-}, MITRE_ROTATE_MS);
-
-function showMitre(view) {
-  mitreView = view;
-  $("mitre-tactics-view").hidden = view !== "tactics";
-  $("mitre-techniques").hidden = view !== "techniques";
-  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
-  // Uma vista escondida mede 0: só ao aparecer se sabe se precisa de deslizar.
-  (view === "tactics" ? tacticsScroll : techniquesScroll).measure();
-}
-document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showMitre(b.dataset.view)));
-
-async function loadMitre() {
-  const d = await api("/api/mitre");
-  $("mitre-period").textContent = "· " + d.period;
-  warn("mitre-warn", d);
-  // Todas as barras partilham a mesma escala (o máximo) e a mesma linha de
-  // base: comparam-se a olho entre si, que é para isso que lá estão.
-  const max = Math.max(1, ...d.tactics.map((t) => t.count));
-  tacticsScroll.render(d.tactics.map((t) => `
-    <div class="tac${t.count ? "" : " zero"}" title="${esc(t.id)} · ${t.count} casos">
-      <span class="tac-name">${esc(t.name)}</span>
-      <span class="tac-bar"><span style="width:${(t.count / max) * 100}%"></span></span>
-      <span class="tac-count">${t.count}</span>
-    </div>`).join(""));
-  techniquesScroll.render(d.techniques.length
-    ? d.techniques.map((t, i) => `<tr><td class="num muted">${i + 1}</td><td class="tech-id">${esc(t.id)}</td>
-        <td title="${esc(t.name)}">${esc(t.name)}</td><td class="num">${t.count}</td></tr>`).join("")
-    : '<tr><td colspan="4" class="empty">Sem técnicas MITRE nos casos deste período.</td></tr>');
-}
 
 /* ---------------- alertas mais críticos ---------------- */
 
@@ -618,7 +576,7 @@ function fail(err) { if (!(err instanceof NotSynced)) console.error(err); }
 
 async function refreshAll() {
   const results = await Promise.allSettled([
-    loadSummary(), loadVolume(), loadCases(), loadMitre(), loadTop(), loadRadar(), loadBriefing(),
+    loadSummary(), loadVolume(), loadCases(), loadTop(), loadRadar(), loadBriefing(),
   ]);
   // Se nenhum pedido chegou ao servidor, é o servidor que está em baixo — não
   // o XSIAM — e o ecrã tem de o dizer em vez de mostrar os números antigos
@@ -634,7 +592,6 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => {
     scaleCharts();
     casesScroll.measure();
-    (mitreView === "tactics" ? tacticsScroll : techniquesScroll).measure();
   }, 200);
 });
 

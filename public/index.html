@@ -81,6 +81,13 @@
   </header>
 
   <main class="grid">
+    <!-- Command Center: a mesma página (paineis.html) em modo embutido, para
+         o fluxo e a animação serem o mesmo código. Escolha do Miguel
+         (2026-10-01): no lugar do painel MITRE ATT&CK, que saiu. -->
+    <section class="panel p-cc">
+      <iframe src="paineis.html?embed&amp;id=command-center" title="XSIAM Command Center: fluxo das últimas 24 horas" loading="eager"></iframe>
+    </section>
+
     <section class="panel p-volume">
       <div class="panel-head">
         <h2>Volume de Incidentes</h2>
@@ -108,30 +115,6 @@
             <colgroup><col class="c-sev"><col class="c-case"><col><col><col><col><col class="c-age"><col class="c-state"></colgroup>
             <tbody id="cases-body"><tr><td colspan="8" class="empty">A aguardar a primeira sincronização com o XSIAM…</td></tr></tbody>
           </table>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel p-mitre" id="mitre-panel">
-      <div class="panel-head">
-        <h2>MITRE ATT&amp;CK <span class="muted" id="mitre-period"></span></h2>
-        <span class="warn" id="mitre-warn" hidden>dados truncados</span>
-        <div class="tabs" role="tablist">
-          <button data-view="tactics" class="on">Táticas</button><button data-view="techniques">Top técnicas</button>
-        </div>
-      </div>
-      <div class="mitre-view scroll-view" id="mitre-tactics-view">
-        <div class="scroll-track"><div class="tac-grid" id="mitre-tactics"></div></div>
-      </div>
-      <div class="mitre-view" id="mitre-techniques" hidden>
-        <table class="tbl">
-          <colgroup><col class="c-rank"><col class="c-tid"><col><col class="c-n"></colgroup>
-          <thead><tr><th class="num">#</th><th>ID</th><th>Técnica</th><th class="num">Casos</th></tr></thead>
-        </table>
-        <div class="scroll-view" id="mitre-techniques-view">
-          <div class="scroll-track">
-            <table class="tbl"><colgroup><col class="c-rank"><col class="c-tid"><col><col class="c-n"></colgroup><tbody id="mitre-techniques-body"></tbody></table>
-          </div>
         </div>
       </div>
     </section>
@@ -166,7 +149,6 @@
       <img src="assets/barra-prr.png" alt="PRR – Plano de Recuperação e Resiliência · República Portuguesa · Financiado pela União Europeia – NextGenerationEU">
     </div>
     <button class="btn-leve" id="btn-leve" type="button" title="Sem animações decorativas, e as listas avançam aos saltos: para ver por ambiente de trabalho remoto">Modo leve</button>
-    <a class="btn-paineis" href="paineis.html" title="Dashboards exportados da consola do XSIAM">Dashboards XSIAM ›</a>
     <div class="rodape-texto">
       <p>Azores Cyber 360 - SOC RADAR &nbsp;&nbsp; Dados em tempo real via CORTEX XSIAM</p>
       <p>Cofinanciado no âmbito do PRR -- NextGenerationEU Governo Regional dos Açores</p>

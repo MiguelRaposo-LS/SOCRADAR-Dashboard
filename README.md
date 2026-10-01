@@ -114,21 +114,27 @@ paginação segue até vir uma página incompleta, com um teto
 | MTTR | **Mean Time To Resolve**: da criação à resolução, só casos resolvidos nas últimas 24h, sem os automáticos nem os duplicados (XQL). Acima de 120 min aparece em horas |
 | Volume | Casos por data de criação, no fuso dos Açores, uma linha por severidade. «Médio» abre escondido (é 97–99% dos casos e esmagava as outras linhas); um clique na legenda mostra-o, e o tooltip dá sempre o total com todas as severidades |
 | Alertas mais críticos | Alertas das últimas 24h, os mais graves e recentes primeiro. O mesmo alerta no mesmo host junta-se numa linha, com «×N» |
-| MITRE, radar | Casos, pelas táticas e técnicas que o XSIAM lhes atribui. Um caso com duas táticas conta nas duas |
+| Radar (Gravidade das Ameaças) | Casos, pelas táticas MITRE que o XSIAM lhes atribui. Um caso com duas táticas conta nas duas |
 | Estado da API | Verde: última sincronização correu bem há menos de 10 min. Amarelo: falhou, ou está parada há mais de 10 min. Vermelho: falha e mais de 10 min sem dados, ou o servidor não responde |
 
-## Dashboards do XSIAM (segunda página)
+## XSIAM Command Center
 
-O primeiro separador é o **XSIAM Command Center**, uma réplica do dashboard
+No topo do painel principal, no lugar onde estava o MITRE ATT&CK (que saiu a
+2026-10-01), está o **XSIAM Command Center**, uma réplica do dashboard
 pré-definido da consola (esse não se exporta), calculada pelas nossas fontes.
 Foi conferido contra uma captura da consola (2026-09-30): casos abertos por
 severidade e ingestão batem (±1%). Casos de 24h (+18%), Issues (−8%) e
 Prevented Events (−8%) usam definições que não se conseguiram reproduzir, e
-cada número diz a sua definição (ao passar o rato). O visual segue o da consola: fontes de dados → Issues → Cases → Automated/Manual → Resolved/Open, com a faixa de ingestão, casos abertos e eventos prevenidos em baixo; cada fonte mostra o seu logótipo, se houver um em `public/assets/icones-fontes/` (ver o `LEIA-ME.txt` dessa pasta), ou um círculo com a inicial. Thread própria, de 15 em 15 min, só com consultas
+cada número diz a sua definição (ao passar o rato). O visual segue o da consola: fontes de dados → Issues → Cases → Automated/Manual → Resolved/Open, com os números de ingestão, casos abertos e eventos prevenidos ao lado (em baixo, na página `paineis.html` aberta sozinha); cada fonte mostra o seu logótipo, se houver um em `public/assets/icones-fontes/` (ver o `LEIA-ME.txt` dessa pasta), ou um círculo com a inicial. Thread própria, de 15 em 15 min, só com consultas
 baratas (~0,02 de quota); os alertas vêm da recolha do painel principal.
 
-O botão «Dashboards XSIAM ›» no rodapé abre `paineis.html`, que mostra
-dashboards do XSIAM com os dados atuais. A API de dashboards do XSIAM exige o
+É a página `paineis.html` dentro de um `iframe`, em modo embutido
+(`?embed`): o mesmo código desenha o fluxo nos dois sítios.
+
+### Dashboards exportados
+
+`paineis.html` (sem botão no painel: abre-se pelo endereço) mostra
+dashboards do XSIAM com os dados atuais, num separador cada. A API de dashboards do XSIAM exige o
 papel Instance Administrator, que não se dá a uma chave guardada no PC da TV.
 Por isso:
 

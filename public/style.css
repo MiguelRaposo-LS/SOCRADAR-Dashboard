@@ -197,9 +197,12 @@ h1, h2 { margin: 0; font-weight: 600; }
   grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
   grid-template-rows: repeat(10, minmax(0, 1fr));
 }
-.p-volume { grid-column: 1; grid-row: 1 / 4; }
-.p-cases  { grid-column: 1; grid-row: 4 / 8; }
-.p-mitre  { grid-column: 1; grid-row: 8 / 11; }
+/* O Command Center em cima (fluxo mais faixa precisam de altura), o volume e
+   os casos por baixo; o painel MITRE ATT&CK saiu (2026-10-01). */
+.p-cc     { grid-column: 1; grid-row: 1 / 5; padding: 0; }
+.p-volume { grid-column: 1; grid-row: 5 / 8; }
+.p-cases  { grid-column: 1; grid-row: 8 / 11; }
+.p-cc iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
 .p-top    { grid-column: 2; grid-row: 1 / 5; }
 .p-radar  { grid-column: 2; grid-row: 5 / 8; }
 .p-brief  { grid-column: 2; grid-row: 8 / 11; }
@@ -240,7 +243,6 @@ h1, h2 { margin: 0; font-weight: 600; }
 .tbl tr.case:hover td { background: var(--surface-2); }
 .tbl tr.case.open td { background: var(--surface-2); }
 .tbl .id { color: var(--ink-2); }
-.tbl .tech-id { color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .85em; }
 .tbl .rep { color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.267rem; padding: 0 0.267rem; font-size: .85em; font-weight: 600; }
 .tbl .empty { color: var(--ink-3); text-align: center; padding: 1.2rem; white-space: normal; }
 /* As larguras vivem em <col>, e não nos <th>: o cabeçalho e o corpo são
@@ -249,8 +251,6 @@ col.c-sev { width: 1.8rem; }
 col.c-case { width: 28%; }
 col.c-age { width: 4.5rem; }
 col.c-state { width: 8rem; }
-col.c-rank { width: 2.5rem; }
-col.c-tid { width: 7rem; }
 col.c-n { width: 5rem; }
 .p-top .tbl th:nth-child(2) { width: 5.2rem; }
 .p-top .tbl th:nth-child(5) { width: 5.6rem; }
@@ -272,22 +272,6 @@ col.c-n { width: 5rem; }
 .scroll-track { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
 .scroll-view:not(.scrolling) .scroll-track { height: 100%; }
 .paused { font-size: .8rem; color: var(--degraded); }
-
-/* --- MITRE --- */
-.mitre-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.tac-grid {
-  display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr;
-  grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); column-gap: 1.867rem;
-  height: 100%;
-}
-/* A deslizar (ecrã baixo), cada cópia da grelha tem a sua altura natural. */
-.scrolling .tac-grid { height: auto; grid-template-rows: repeat(7, 2rem); }
-.tac { display: grid; grid-template-columns: 11rem 1fr 3rem; align-items: center; gap: 0.667rem; font-size: .88rem; }
-.tac-name { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tac-bar { height: 0.667rem; background: var(--grid); border-radius: 0 0.267rem 0.267rem 0; overflow: hidden; }
-.tac-bar span { display: block; height: 100%; background: var(--accent); border-radius: 0 0.267rem 0.267rem 0; min-width: 0; }
-.tac-count { text-align: right; font-weight: 600; }
-.tac.zero .tac-count, .tac.zero .tac-name { color: var(--ink-3); }
 
 /* --- radar / briefing --- */
 .radar-wrap { flex: 1; min-height: 0; display: flex; gap: 0.533rem; }
@@ -325,7 +309,7 @@ col.c-n { width: 5rem; }
   .grid { display: flex; flex-direction: column; padding: 0 16px; }
   .panel { min-height: 320px; }
   .p-cases { min-height: 460px; }
-  .tac-grid { grid-template-columns: 1fr; grid-auto-flow: row; grid-template-rows: none; }
+  .p-cc { min-height: 360px; }
 }
 
 /* --- Página «Dashboards do XSIAM» (paineis.html) ---
@@ -334,12 +318,12 @@ col.c-n { width: 5rem; }
 body.pagina-paineis { overflow: auto; height: auto; min-height: 100%; }
 .paineis-top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.667rem var(--gap); }
 .paineis-top h1 { font-size: 1.3rem; }
-.btn-voltar, .btn-paineis {
+.btn-voltar {
   color: var(--ink); text-decoration: none; white-space: nowrap;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.4rem;
   padding: 0.3rem 0.8rem; font-size: .85rem;
 }
-.btn-voltar:hover, .btn-paineis:hover { border-color: var(--accent); }
+.btn-voltar:hover { border-color: var(--accent); }
 .paineis-grid {
   display: grid; gap: var(--gap); padding: 0 var(--gap) var(--gap);
   grid-template-columns: repeat(auto-fill, minmax(min(28rem, 100%), 1fr));
@@ -423,3 +407,40 @@ body.pagina-paineis { overflow: auto; height: auto; min-height: 100%; }
 .paineis-top .btn-leve { margin-left: auto; }
 html.leve .radar-varrimento, html.leve .radar-ponto, html.leve .cc-anel { animation: none !important; }
 html.leve .radar-ponto { opacity: .6; }
+
+/* paineis.html?embed: o Command Center dentro da página principal. Sem
+   cabeçalho nem nota. A faixa dos números vai para uma coluna à direita do
+   fluxo: por baixo, comia metade da altura e o diagrama ficava com 392×152 px
+   a 1920 (medido). O diagrama fica do tamanho que a caixa deixar — a largura
+   é a menor entre a disponível e a que a altura permite (viewBox 1600×620). */
+html.embed body.pagina-paineis { overflow: hidden; height: 100%; }
+html.embed .paineis-top, html.embed .cc-nota { display: none; }
+html.embed .paineis-grid { padding: 0; height: 100%; }
+html.embed .cc-palco { height: 100%; box-sizing: border-box; border: 0; border-radius: 0;
+  padding: 0.533rem 0.8rem; display: grid; column-gap: 0.8rem;
+  grid-template-columns: minmax(0, 1fr) 17rem; grid-template-rows: auto minmax(0, 1fr); }
+html.embed .cc-topo { grid-column: 2; grid-row: 1; flex-wrap: wrap; gap: 0.267rem; }
+html.embed .cc-topo h2 { font-size: 1rem; font-weight: 600; }
+/* «Últimas 24 horas» numa etiqueta ocupava uma segunda linha na coluna. */
+html.embed .cc-janela { display: none; }
+html.embed .cc-topo h2::after { content: " · 24 h"; color: var(--ink-3); font-weight: 400; }
+html.embed .cc-flow-area { grid-column: 1; grid-row: 1 / 3; min-height: 0; container-type: size;
+  display: flex; justify-content: center; align-items: center; }
+html.embed .cc-flow-wrap { width: min(100cqw, calc(100cqh * 1600 / 620)); }
+html.embed .cc-faixa { grid-column: 2; grid-row: 2; display: flex; flex-direction: column;
+  justify-content: space-around; margin: 0; padding: 0; border-top: 0; }
+html.embed .cc-bloco { padding: 0.267rem 0; border-right: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+html.embed .cc-bl-t { font-size: .75rem; margin-bottom: 0.133rem; }
+html.embed .cc-bl-v { flex-wrap: wrap; row-gap: 0.133rem; }
+html.embed .cc-bl-v strong { white-space: nowrap; }
+html.embed .cc-bl-v strong { font-size: 1.25rem; }
+html.embed .cc-spark { width: 5rem; height: 1.2rem; }
+html.embed .cc-chev, html.embed .cc-chev strong { font-size: .75rem; }
+html.embed .cc-sevs { gap: 0.4rem; }
+/* O diagrama encolhe para caber: o texto dele (em unidades do viewBox)
+   aumenta na mesma proporção, para continuar a ler-se. */
+html.embed .cc-flow .cc-num { font-size: 36px; }
+html.embed .cc-flow .cc-lbl { font-size: 20px; }
+html.embed .cc-flow .cc-src { font-size: 17px; }
+html.embed .cc-flow .cc-src-forte { font-size: 18px; }
+html.embed .cc-flow .cc-sevline { font-size: 18px; }

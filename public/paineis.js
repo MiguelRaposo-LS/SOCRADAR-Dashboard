@@ -26,6 +26,19 @@ const LEVE = (() => {
   } catch { return q.has("leve") && q.get("leve") !== "0"; }
 })();
 if (LEVE) document.documentElement.classList.add("leve");
+// ?embed: o Command Center dentro da página principal (iframe). O tamanho do
+// texto (rem) vem da página de fora: calculado aqui, pela janela do iframe,
+// saía do tamanho da caixa e as letras ficavam minúsculas.
+const EMBED = new URLSearchParams(location.search).has("embed");
+if (EMBED) {
+  document.documentElement.classList.add("embed");
+  const syncRem = () => {
+    try { document.documentElement.style.fontSize = getComputedStyle(parent.document.documentElement).fontSize; }
+    catch { /* aberta noutro sítio: fica a escala própria */ }
+  };
+  syncRem();
+  addEventListener("resize", syncRem);
+}
 function toggleLeve() {
   try { localStorage.setItem("ac360:leve", LEVE ? "0" : "1"); } catch { /* sem storage */ }
   location.replace(location.pathname + location.search.replace(/[?&]leve(=[^&]*)?/g, "").replace(/^&/, "?"));
@@ -142,8 +155,8 @@ function renderWidget(w) {
 
 // Visual do mesmo género do Command Center da consola: fontes de dados →
 // Issues → Cases → Automated/Manual → Resolved/Open, e a faixa de números em
-// baixo. Desenhado em SVG a partir dos dados reais (command_center.py). As
-// marcas das fontes aparecem como texto: os logótipos não se copiam.
+// baixo. Desenhado em SVG a partir dos dados reais (command_center.py), com
+// os logótipos das fontes de public/assets/icones-fontes/.
 // Animação: o anel roda numa camada própria (compositor) e as partículas
 // desenham-se num <canvas> a 30 fps — o SVG do diagrama não se volta a pintar.
 
@@ -420,7 +433,7 @@ async function loadCommandCenter() {
   grid.innerHTML = `
     <section class="cc-palco">
       <div class="cc-topo"><h2>XSIAM Command Center</h2><span class="cc-janela">Últimas 24 horas</span></div>
-      <div class="cc-flow-wrap">${flowSvg(d)}${ringSvg()}<canvas class="cc-canvas" aria-hidden="true"></canvas></div>
+      <div class="cc-flow-area"><div class="cc-flow-wrap">${flowSvg(d)}${ringSvg()}<canvas class="cc-canvas" aria-hidden="true"></canvas></div></div>
       <div class="cc-faixa">
         <div class="cc-bloco" title="Soma de total_event_count no dataset metrics_source (bate com a consola, ±1%)">
           <div class="cc-bl-t">Events Ingestion</div>
@@ -440,7 +453,8 @@ async function loadCommandCenter() {
     </section>`;
   startParticles(grid.querySelector(".cc-flow-wrap"));
   $("paineis-meta").textContent = `casos e ingestão: atualizado ${ago(d.at)} (de 15 em 15 min) · alertas: ${ago(d.alerts_at)}`;
-  try { history.replaceState(null, "", `?id=${CC_ID}`); } catch { /* sem history */ }
+  // Embutido, o endereço fica como está: trocá-lo perdia o ?embed.
+  if (!EMBED) try { history.replaceState(null, "", `?id=${CC_ID}`); } catch { /* sem history */ }
 }
 
 async function loadDashboard(id) {
