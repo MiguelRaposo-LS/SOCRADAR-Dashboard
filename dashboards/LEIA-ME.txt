@@ -1,0 +1,2 @@
+Pôr aqui os dashboards exportados da consola do XSIAM (Dashboards → ⋯ → Export), em .json.
+Os .json ficam fora do git.

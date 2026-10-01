@@ -113,7 +113,7 @@ notepad .env
 | `CORTEX_API_URL` | o URL da API do tenant (consola do XSIAM, «Copy API URL») |
 | `CORTEX_API_KEY` | a chave |
 | `CORTEX_API_KEY_ID` | o ID da chave |
-| `CORTEX_AUTH` | `advanced` (com `standard`, a chave do GRA dá 401) |
+| `CORTEX_AUTH` | o tipo da chave: `standard` ou `advanced` (a do GRA alternou entre os dois a 2026-09-30, quando lhe mudaram as permissões). Se estiver errado, o servidor usa o outro e avisa no log |
 | `OLLAMA_URL` | `http://<IP do Lubuntu>:11434`, **não** `localhost` |
 | `OLLAMA_MODEL` | `llama3.2:3b` |
 
@@ -259,7 +259,8 @@ Desligar e voltar a ligar o PC, sem tocar em nada:
 
 | Sintoma | Onde olhar |
 |---|---|
-| Estado da API vermelho, log com `401` | `CORTEX_AUTH` não coincide com o tipo da chave |
+| Estado da API vermelho, log com `401` | a chave foi revogada ou regenerada na consola (o tipo errado já não dá 401: o servidor tenta o outro) |
+| Log com `acerta CORTEX_AUTH=…` | o tipo no `.env` está errado; funciona, mas corrigir o `.env` |
 | Estado da API vermelho, log com `Sem ligação` | o PC não chega à Internet ou ao tenant (proxy, firewall) |
 | Briefing «por regras», log com `model 'llama3.2:3b' not found` | falta o `ollama pull` no Lubuntu (1.1) |
 | Briefing «por regras», log com `ConnectionError` | `OLLAMA_URL` errado, Ollama só em `localhost` (1.2) ou firewall (1.3) |

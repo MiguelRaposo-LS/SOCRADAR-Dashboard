@@ -11,6 +11,7 @@ import json
 import logging
 import secrets
 import string
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -42,10 +43,11 @@ class CortexClient:
         self._timeout = timeout
         self._workers = workers
         self.last_quota = None
+        self._auth_lock = threading.Lock()
         self._session = requests.Session()
 
-    def _headers(self) -> dict:
-        if self._advanced:
+    def _headers(self, advanced: bool | None = None) -> dict:
+        if self._advanced if advanced is None else advanced:
             nonce = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(64))
             ts = str(int(time.time()) * 1000)
             digest = hashlib.sha256((self._key + nonce + ts).encode()).hexdigest()
@@ -54,13 +56,38 @@ class CortexClient:
         return {"x-xdr-auth-id": self._key_id, "Authorization": self._key,
                 "Content-Type": "application/json"}
 
-    def _post(self, path: str, request_data: dict) -> dict:
+    def _send(self, path: str, request_data: dict, advanced: bool):
         try:
-            r = self._session.post(self.url + path, json={"request_data": request_data},
-                                   headers=self._headers(), timeout=self._timeout,
-                                   verify=self._verify)
+            return self._session.post(self.url + path, json={"request_data": request_data},
+                                      headers=self._headers(advanced), timeout=self._timeout,
+                                      verify=self._verify)
         except requests.RequestException as exc:
             raise CortexError("rede", f"Sem ligação ao XSIAM em {path} ({type(exc).__name__}).") from None
+
+    def _post(self, path: str, request_data: dict) -> dict:
+        mode = self._advanced
+        r = self._send(path, request_data, mode)
+        if r.status_code == 401:
+            # A 2026-09-30 a mesma chave alternou entre «advanced» e «standard»
+            # depois de lhe mudarem as permissões, e o ecrã ficou sem dados até
+            # alguém mexer no .env. Num 401 tenta-se o outro tipo.
+            # Com pedidos em paralelo, dois 401 ao mesmo tempo trocavam o tipo
+            # duas vezes e falhavam os dois (visto no mesmo dia): cada pedido
+            # lembra-se do tipo com que foi, e a troca faz-se sob lock — se
+            # outro já trocou, este só repete com o tipo novo.
+            with self._auth_lock:
+                if self._advanced == mode:
+                    r2 = self._send(path, request_data, not mode)
+                    if r2.status_code != 401:
+                        self._advanced = not mode
+                        log.warning("A chave do XSIAM deu 401 como %s e funciona como %s: "
+                                    "acerta CORTEX_AUTH=%s no .env.",
+                                    "advanced" if mode else "standard",
+                                    "standard" if mode else "advanced",
+                                    "standard" if mode else "advanced")
+                        r = r2
+                else:
+                    r = self._send(path, request_data, self._advanced)
         if r.status_code != 200:
             # O `err_extra` é o que separa «chave errada» de «falta um papel à
             # chave» — sem ele, um 403 manda procurar no sítio errado.
@@ -124,17 +151,62 @@ class CortexClient:
                               [{"field": "modification_time", "operator": "gte", "value": since_ms}],
                               {"field": "modification_time", "keyword": "asc"}, max_pages)
 
-    def open_incidents(self, max_pages: int) -> tuple[list[dict], bool]:
-        return self._paginate("/public_api/v1/incidents/get_incidents/", "incidents",
-                              [{"field": "status", "operator": "in",
-                                "value": ["new", "under_investigation"]}],
+    _OPEN = {"field": "status", "operator": "in", "value": ["new", "under_investigation"]}
+
+    def open_incidents(self, max_pages: int, since_ms: int | None = None) -> tuple[list[dict], bool]:
+        """Os casos abertos, só os criados desde `since_ms` se for dado."""
+        filters = [self._OPEN]
+        if since_ms is not None:
+            filters.append({"field": "creation_time", "operator": "gte", "value": since_ms})
+        return self._paginate("/public_api/v1/incidents/get_incidents/", "incidents", filters,
                               {"field": "creation_time", "keyword": "asc"}, max_pages)
+
+    def count_open_before(self, until_ms: int) -> int:
+        """Quantos casos abertos foram criados antes de `until_ms`.
+
+        São ~59 mil (medido a 2026-09-30): paginá-los eram ~600 páginas. O
+        `total_count` da API não serve (vinha até 7× abaixo do real). Conta-se
+        por bissecção dos offsets: procura-se a última página cheia e soma-se
+        a incompleta. São ~11 pedidos em vez de ~600.
+        """
+        filters = [self._OPEN, {"field": "creation_time", "operator": "lte", "value": until_ms - 1}]
+
+        def size(page: int) -> int:
+            reply = self._post("/public_api/v1/incidents/get_incidents/", {
+                "filters": filters, "sort": {"field": "creation_time", "keyword": "asc"},
+                "search_from": page * PAGE_SIZE, "search_to": (page + 1) * PAGE_SIZE})
+            return len(reply.get("incidents") or [])
+
+        if size(0) < PAGE_SIZE:
+            return size(0)
+        lo, hi = 0, 64          # lo: página cheia conhecida; hi: a sondar
+        while size(hi) == PAGE_SIZE:
+            lo, hi = hi, hi * 2
+        while hi - lo > 1:      # invariante: lo cheia, hi não
+            mid = (lo + hi) // 2
+            if size(mid) == PAGE_SIZE:
+                lo = mid
+            else:
+                hi = mid
+        return hi * PAGE_SIZE + size(hi)
 
     def incident_extra_data(self, incident_id: str, alerts_limit: int = 50) -> dict:
         return self._post("/public_api/v1/incidents/get_incident_extra_data/",
                           {"incident_id": str(incident_id), "alerts_limit": alerts_limit})
 
     # --- alertas (issues) ---------------------------------------------------
+
+    def alerts_inserted_since(self, since_ms: int, max_pages: int) -> tuple[list[dict], bool]:
+        """Alertas que *entraram* no XSIAM desde `since_ms` (server_creation_time).
+
+        O creation_time é a hora da deteção, e 24% dos alertas entram mais de
+        10 min depois dela (p90 2h20, máximo 7h30 — medido a 2026-09-30): o
+        incremental por creation_time nunca os apanhava, e o painel via ~1/4
+        dos alertas das últimas 24h.
+        """
+        return self._paginate("/public_api/v1/alerts/get_alerts_multi_events/", "alerts",
+                              [{"field": "server_creation_time", "operator": "gte", "value": since_ms}],
+                              {"field": "creation_time", "keyword": "asc"}, max_pages)
 
     def alerts_created_since(self, since_ms: int, max_pages: int) -> tuple[list[dict], bool]:
         return self._paginate("/public_api/v1/alerts/get_alerts_multi_events/", "alerts",
@@ -263,3 +335,47 @@ class CortexClient:
         return [{"status": str(r.get("status") or "").lower(), "n": int(float(r["n"])),
                  "avg_min": float(r["media"]) if r.get("media") not in (None, "") else None}
                 for r in rows]
+
+    # --- Command Center (página «Dashboards XSIAM») ----------------------------
+    #
+    # Réplica do «XSIAM Command Center» (dashboard pré-definido: não se exporta).
+    # Só consultas baratas: `incidents` ~0,008 e `metrics_source` ~0,0003 de
+    # quota cada (2026-09-30). Os alertas vêm da recolha do painel principal —
+    # o XQL sobre `alerts` custou 0,38 por consulta.
+
+    def cases_by_status_severity(self, since_ms: int) -> list[dict]:
+        rel = int(time.time() * 1000) - since_ms + 3_600_000
+        rows = self.xql(f"""dataset = incidents
+| filter creation_time >= {self._ts(since_ms)}
+| comp count() as n by status, severity""", rel)
+        return [{"status": str(r.get("status") or "").lower(), "severity": r.get("severity"),
+                 "n": int(float(r["n"]))} for r in rows]
+
+    def open_by_severity_all(self) -> list[dict]:
+        # Sem filtro de estado no XQL: «status = …» não devolvia nada (medido);
+        # agrupa-se por estado e filtra-se cá.
+        rows = self.xql("dataset = incidents | comp count() as n by status, severity", 400 * 86_400_000)
+        return [{"status": str(r.get("status") or "").lower(), "severity": r.get("severity"),
+                 "n": int(float(r["n"]))} for r in rows]
+
+    def ingestion(self, since_ms: int, until_ms: int | None = None) -> dict:
+        """Eventos e bytes ingeridos (dataset metrics_source), total e por hora."""
+        until_ms = until_ms or int(time.time() * 1000)
+        rel = int(time.time() * 1000) - since_ms + 3_600_000
+        rows = self.xql(f"""dataset = metrics_source
+| filter _time >= {self._ts(since_ms)} and _time < {self._ts(until_ms)}
+| alter hora = floor(divide(to_epoch(_time, "MILLIS"), 3600000))
+| comp sum(total_event_count) as eventos, sum(total_size_bytes) as bytes_total by hora""", rel)
+        hours = sorted(({"hora": int(float(r["hora"])), "events": float(r.get("eventos") or 0),
+                         "bytes": float(r.get("bytes_total") or 0)} for r in rows), key=lambda x: x["hora"])
+        return {"events": sum(h["events"] for h in hours), "bytes": sum(h["bytes"] for h in hours), "hours": hours}
+
+    def data_sources(self, since_ms: int, top: int = 10) -> list[dict]:
+        rel = int(time.time() * 1000) - since_ms + 3_600_000
+        rows = self.xql(f"""dataset = metrics_source
+| filter _time >= {self._ts(since_ms)}
+| comp sum(total_event_count) as eventos, sum(total_size_bytes) as bytes_total by _vendor, _product""", rel)
+        out = [{"vendor": r.get("_vendor"), "product": r.get("_product"),
+                "events": float(r.get("eventos") or 0), "bytes": float(r.get("bytes_total") or 0)} for r in rows]
+        # Todas (são dezenas), para se saber quantas ficam de fora do top.
+        return sorted(out, key=lambda x: -x["events"])

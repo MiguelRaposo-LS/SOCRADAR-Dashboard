@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboards XSIAM - SOC RADAR</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  <script src="paineis.js" defer></script>
+</head>
+<body class="pagina-paineis">
+  <div id="demo-banner" class="demo-banner" hidden>DADOS DE DEMONSTRAÇÃO — não são dados do XSIAM</div>
+
+  <header class="paineis-top">
+    <a class="btn-voltar" href="./">← Painel principal</a>
+    <h1>Dashboards do XSIAM</h1>
+    <nav class="tabs" id="paineis-tabs" role="tablist"></nav>
+    <span class="muted" id="paineis-meta"></span>
+    <button class="btn-leve" id="btn-leve" type="button" title="Sem animações decorativas: para ver por ambiente de trabalho remoto">Modo leve</button>
+  </header>
+
+  <main class="paineis-grid" id="paineis-grid">
+    <p class="muted paineis-vazio" id="paineis-vazio">A carregar…</p>
+  </main>
+</body>
+</html>

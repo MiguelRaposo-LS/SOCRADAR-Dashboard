@@ -83,6 +83,10 @@ h1, h2 { margin: 0; font-weight: 600; }
    cabeçalho (MTTR, estado, relógio): assim todos acabam à mesma altura. */
 .grupo-cabecalho { --rotulo-gap: 0.267rem; display: flex; flex-direction: column; align-items: center; gap: var(--rotulo-gap); }
 .grupo-cabecalho .cartoes { display: flex; gap: 0.533rem; align-items: stretch; flex: 1; }
+/* O histórico acumulado (abertos há mais de 90 dias): discreto, sem
+   maiúsculas nem cartão, para não competir com a carga de trabalho atual. */
+.rotulo-grupo .backlog { text-transform: none; letter-spacing: 0; color: var(--ink-2); font-style: italic; }
+.rotulo-grupo .backlog::before { content: " · "; font-style: normal; color: var(--ink-3); }
 .grupo-cabecalho .rotulo-grupo {
   width: 100%; text-align: center; line-height: 1rem; height: 1rem;
   font-size: .72rem; color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em;
@@ -107,8 +111,11 @@ h1, h2 { margin: 0; font-weight: 600; }
 .kpi-mttr      { --c: var(--mttr); margin-bottom: var(--rotulo-h); }
 .divider { width: 1px; background: var(--line); margin: 0.267rem 0.133rem 1.2rem; }
 
+/* A nota da fonte por cima do bloco de estado, alinhada à direita dele. */
+.estado-grupo { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: var(--rotulo-h); }
 .api-status {
-  display: flex; align-items: center; gap: 0.667rem; margin-bottom: var(--rotulo-h);
+  flex: 1;
+  display: flex; align-items: center; gap: 0.667rem;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 0.4rem 0.933rem; min-width: 11rem;
 }
@@ -116,6 +123,11 @@ h1, h2 { margin: 0; font-weight: 600; }
 .api-status[data-state="operacional"] .dot { background: var(--ok); box-shadow: 0 0 0.667rem var(--ok); }
 .api-status[data-state="degradado"] .dot { background: var(--degraded); }
 .api-status[data-state="sem_ligacao"] .dot { background: var(--down); animation: pulse 1.2s infinite; }
+.fonte-dados {
+  display: flex; flex-direction: column; align-items: flex-end;
+  font-size: .6rem; line-height: 1.3; font-style: italic; white-space: nowrap;
+  color: rgba(255, 255, 255, 0.45);
+}
 .api-state { font-weight: 600; white-space: nowrap; }
 .api-last, .kpi-value, .kpi-sub { white-space: nowrap; }
 .api-last { font-size: .8rem; color: var(--ink-2); }
@@ -289,16 +301,21 @@ col.c-n { width: 5rem; }
 .brief li { margin-bottom: 0.267rem; }
 .brief li::marker { color: var(--ink-3); }
 
-/* A barra de cofinanciamento vai tal como foi entregue, sobre branco: as
-   regras de publicitação não deixam recolorir os logótipos nem pô-los sobre
-   fundo escuro. */
-.foot {
-  display: flex; justify-content: space-between; align-items: center;
-  margin-top: var(--gap); background: #fff; height: 3.6rem; padding: 0 var(--gap);
-  flex: none;
+/* Rodapé institucional: logótipos à esquerda, texto à direita. A barra do PRR
+   fica sobre branco — o cinzento-escuro do PRR e o azul da UE não se leem no
+   fundo escuro, e as regras de publicitação não deixam mudar-lhe as cores. É
+   uma barra já composta (com margens próprias), por isso fica mais alta do
+   que um logótipo solto, para os símbolos ficarem com ~1,6 rem visíveis. */
+.rodape-institucional {
+  display: flex; justify-content: space-between; align-items: center; gap: 1.167rem;
+  padding: 0.467rem 1.167rem; margin-top: var(--gap); flex: none;
+  background: var(--bg); border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-.foot img { height: 100%; width: auto; display: block; }
-.foot-sync { font-size: .75rem; color: #5a6475; text-align: right; }
+.rodape-logos { display: flex; align-items: center; gap: 0.933rem; flex: none;
+  background: #fff; border-radius: 0.267rem; padding: 0.133rem 0.4rem; }
+.rodape-logos img { height: 2.6rem; width: auto; object-fit: contain; display: block; }
+.rodape-texto { text-align: right; font-size: .65rem; line-height: 1.5; color: rgba(255, 255, 255, 0.6); }
+.rodape-texto p { margin: 0; white-space: nowrap; }
 
 /* Fora da parede (portátil, telemóvel): empilha e deixa fazer scroll. */
 @media (max-width: 1100px) {
@@ -310,3 +327,100 @@ col.c-n { width: 5rem; }
   .p-cases { min-height: 460px; }
   .tac-grid { grid-template-columns: 1fr; grid-auto-flow: row; grid-template-rows: none; }
 }
+
+/* --- Página «Dashboards do XSIAM» (paineis.html) ---
+   Ao contrário do painel da parede, esta abre-se com um clique e pode ter
+   scroll: o número de widgets depende do dashboard exportado. */
+body.pagina-paineis { overflow: auto; height: auto; min-height: 100%; }
+.paineis-top { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.667rem var(--gap); }
+.paineis-top h1 { font-size: 1.3rem; }
+.btn-voltar, .btn-paineis {
+  color: var(--ink); text-decoration: none; white-space: nowrap;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.4rem;
+  padding: 0.3rem 0.8rem; font-size: .85rem;
+}
+.btn-voltar:hover, .btn-paineis:hover { border-color: var(--accent); }
+.paineis-grid {
+  display: grid; gap: var(--gap); padding: 0 var(--gap) var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(min(28rem, 100%), 1fr));
+}
+.paineis-widget { min-height: 18rem; }
+.paineis-corpo { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
+.paineis-corpo .chart-box { min-height: 14rem; }
+.paineis-numero { font-size: 3rem; font-weight: 700; line-height: 1.1; }
+.paineis-tabela { overflow: auto; max-height: 22rem; }
+.warn-text { color: var(--degraded); }
+.paineis-vazio { grid-column: 1 / -1; padding: 2rem 0; line-height: 1.6; }
+
+/* Command Center: blocos de número e três painéis largos. */
+.cc-tile { min-height: 11rem; }
+.cc-def { margin-top: auto; padding-top: 0.5rem; font-size: .72rem; color: var(--ink-3); line-height: 1.35; }
+.cc-wide { min-height: 18rem; }
+/* Grelha própria do Command Center: 5 números numa linha; casos abertos (2/5)
+   ao lado da ingestão (3/5); fontes de dados a toda a largura. */
+.paineis-grid.cc-grid { grid-template-columns: minmax(0, 1fr); }
+.cc-grid .cc-open { grid-column: span 2; }
+.cc-grid .cc-ing { grid-column: span 3; }
+.cc-grid .cc-src { grid-column: 1 / -1; min-height: 0; }
+.cc-grid .cc-src .paineis-tabela { max-height: none; }
+.cc-sev { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.cc-sev-item { display: flex; align-items: center; gap: 0.4rem; color: var(--ink-2); }
+.cc-sev-item strong { color: var(--ink); font-size: 1.15rem; margin-left: 0.2rem; }
+.cc-bar { min-height: 9rem; }
+.cc-up { color: var(--sev-high); }
+.cc-down { color: var(--sev-low); }
+@media (max-width: 1100px) { .paineis-grid.cc-grid { grid-template-columns: 1fr; } .cc-grid .cc-open, .cc-grid .cc-ing, .cc-grid .cc-src { grid-column: auto; } }
+
+/* Command Center em fluxo (réplica visual do da consola). */
+.cc-palco {
+  background: radial-gradient(ellipse at 50% 45%, #0f1b2b 0%, var(--bg) 70%);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.2rem 0.8rem;
+}
+.cc-topo { display: flex; justify-content: space-between; align-items: center; }
+.cc-topo h2 { font-size: 1.35rem; font-weight: 500; }
+.cc-janela { background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.4rem; padding: 0.3rem 0.8rem; font-size: .85rem; color: var(--ink-2); }
+.cc-flow { display: block; width: 100%; height: auto; }
+.cc-flow .cc-src { fill: var(--ink-2); font-size: 15px; }
+.cc-flow .cc-mais { fill: var(--ink); font-size: 18px; }
+/* Fontes sem símbolo (só o nome): o nome é que identifica, por isso destaca-se. */
+.cc-flow .cc-src-forte { fill: var(--ink); font-size: 16px; font-weight: 700; }
+.cc-flow .cc-sub { fill: var(--ink-3); font-size: 12px; }
+.cc-flow .cc-num { fill: var(--ink); font-size: 30px; font-weight: 700; }
+.cc-flow .cc-lbl { fill: var(--ink-2); font-size: 15px; }
+.cc-flow .cc-sevline { fill: var(--ink-2); font-size: 14px; }
+.cc-flow-wrap { position: relative; }
+.cc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* O anel é um elemento HTML à parte: o transform anima-se no compositor. */
+.cc-anel { position: absolute; aspect-ratio: 1; height: auto; pointer-events: none;
+  will-change: transform; animation: cc-girar 40s linear infinite; }
+@keyframes cc-girar { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cc-anel { animation: none; } }
+.cc-faixa { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); margin-top: 0.4rem; padding-top: 0.8rem; }
+.cc-bloco { padding: 0 1.2rem; border-right: 1px solid rgba(255, 255, 255, 0.1); }
+.cc-bloco:last-child { border-right: 0; }
+.cc-bl-t { color: var(--ink-2); font-size: .85rem; margin-bottom: 0.3rem; }
+.cc-bl-v { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.cc-bl-v strong { font-size: 1.6rem; font-weight: 500; }
+.cc-bl-v > span { color: var(--ink-3); font-size: .8rem; }
+.cc-spark { color: var(--ink-3); margin-left: 0.4rem; }
+.cc-sevs { display: inline-flex; gap: 0.7rem; }
+.cc-chev { color: var(--ink-2); font-size: .95rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.15rem; }
+.cc-chev-ico { width: 0.8rem; height: 0.8rem; display: block; }
+.cc-chev strong { font-size: .95rem; font-weight: 600; margin-left: 0.15rem; color: var(--ink); }
+.cc-nota { color: var(--ink-3); font-size: .72rem; margin: 0.8rem 0 0; line-height: 1.4; }
+@media (max-width: 1100px) { .cc-faixa { grid-template-columns: 1fr 1fr; row-gap: 1rem; } }
+
+/* Partículas: pontos (traço de 0,1 com pontas redondas) a deslizar ao longo
+   da curva. O padrão mede 18,1 e o ciclo anda 10 padrões em 4 s, por isso a
+   volta não dá salto; três camadas desencontradas dão um fluxo contínuo. */
+.cc-flow .cc-ini { font-size: 10px; font-weight: 700; }
+
+/* Modo leve (ver app.js, LEVE): nada se mexe sem necessidade. */
+.btn-leve {
+  color: var(--ink-2); background: transparent; border: 1px solid var(--line); border-radius: 0.4rem;
+  padding: 0.3rem 0.7rem; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap;
+}
+.btn-leve[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
+.paineis-top .btn-leve { margin-left: auto; }
+html.leve .radar-varrimento, html.leve .radar-ponto, html.leve .cc-anel { animation: none !important; }
+html.leve .radar-ponto { opacity: .6; }

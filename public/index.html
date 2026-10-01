@@ -36,7 +36,7 @@
       <div class="kpi sev-medium"><span class="kpi-label">Médio</span><span class="kpi-value" id="k-medium">–</span></div>
       <div class="kpi sev-low"><span class="kpi-label">Baixo</span><span class="kpi-value" id="k-low">–</span></div>
       </div>
-      <span class="rotulo-grupo">casos abertos</span>
+      <span class="rotulo-grupo">casos abertos · hoje<span class="backlog" id="k-backlog" hidden></span></span>
     </section>
 
     <div class="divider" aria-hidden="true"></div>
@@ -57,11 +57,20 @@
       <span class="kpi-sub" id="k-mttr-sub">últimas 24h</span>
     </div>
 
-    <div class="api-status" id="api-status" data-state="a_sincronizar">
-      <span class="dot" aria-hidden="true"></span>
-      <div>
-        <div class="api-state" id="api-state">A sincronizar…</div>
-        <div class="api-last" id="api-last">Última vez: —</div>
+    <!-- A nota da fonte e o estado da API num só grupo: o grupo fica com a
+         largura do mais largo dos dois, e a nota não invade o cartão do MTTR
+         (com position:absolute, a 1.ª linha passava por cima dele). -->
+    <div class="estado-grupo">
+      <div class="fonte-dados">
+        <span>Fonte: Cortex XSIAM - Governo Regional dos Açores</span>
+        <span>Nº de endpoints protegidos região UE</span>
+      </div>
+      <div class="api-status" id="api-status" data-state="a_sincronizar">
+        <span class="dot" aria-hidden="true"></span>
+        <div>
+          <div class="api-state" id="api-state">A sincronizar…</div>
+          <div class="api-last" id="api-last">Última vez: —</div>
+        </div>
       </div>
     </div>
 
@@ -149,9 +158,19 @@
     </section>
   </main>
 
-  <footer class="foot">
-    <img src="img/barra-cofinanciamento.png" alt="Açores 2030 · Governo dos Açores · Portugal 2030 · Cofinanciado pela União Europeia">
-    <span class="foot-sync" id="foot-sync"></span>
+  <!-- Rodapé institucional. À esquerda, a barra oficial do PRR tal como foi
+       entregue (Fotos/), sem cortes nem cores mudadas: PRR, República
+       Portuguesa, Financiado pela União Europeia – NextGenerationEU. -->
+  <footer class="rodape-institucional">
+    <div class="rodape-logos">
+      <img src="assets/barra-prr.png" alt="PRR – Plano de Recuperação e Resiliência · República Portuguesa · Financiado pela União Europeia – NextGenerationEU">
+    </div>
+    <button class="btn-leve" id="btn-leve" type="button" title="Sem animações decorativas, e as listas avançam aos saltos: para ver por ambiente de trabalho remoto">Modo leve</button>
+    <a class="btn-paineis" href="paineis.html" title="Dashboards exportados da consola do XSIAM">Dashboards XSIAM ›</a>
+    <div class="rodape-texto">
+      <p>Azores Cyber 360 - SOC RADAR &nbsp;&nbsp; Dados em tempo real via CORTEX XSIAM</p>
+      <p>Cofinanciado no âmbito do PRR -- NextGenerationEU Governo Regional dos Açores</p>
+    </div>
   </footer>
 </body>
 </html>

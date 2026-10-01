@@ -1,0 +1,11 @@
+Logótipos oficiais das fontes de dados do Command Center (.svg, .png, .webp, .jpg).
+
+O ficheiro serve a uma fonte se:
+- se chamar exatamente <fornecedor>-<produto> (em minúsculas, com hífens), ex.: panw-ngfw.svg; ou
+- todas as palavras do nome estiverem no nome da fonte, ex.: ngfw.svg serve a panw-ngfw,
+  o365.svg serve a msft-o365-contacts. Com vários candidatos, ganha o mais específico.
+  «msft» e «microsoft» contam como a mesma palavra; «icon»/«logo» no fim do nome ignoram-se.
+
+Os .png/.jpg aparecem sobre um fundo claro (muitos não têm transparência); os .svg não.
+Sem ficheiro, a página mostra um círculo com a inicial.
+Algumas fontes aparecem só com o nome, por escolha: ver NAME_ONLY em command_center.py.

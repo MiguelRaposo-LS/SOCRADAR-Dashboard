@@ -144,8 +144,49 @@ class DemoSource:
         self._tick()
         return [i for i in self._incidents if i["modification_time"] >= since_ms], False
 
-    def open_incidents(self, max_pages):
-        return [i for i in self._incidents if i["status"] in ("new", "under_investigation")], False
+    def open_incidents(self, max_pages, since_ms=None):
+        return [i for i in self._incidents if i["status"] in ("new", "under_investigation")
+                and (since_ms is None or i["creation_time"] >= since_ms)], False
+
+    def xql(self, query, relative_ms, limit=None):
+        """Para a página dos dashboards exportados em modo demo: linhas
+        inventadas com a forma de um «comp count() by …»."""
+        r = random.Random(hash(query) & 0xFFFF)
+        cats = ["Execução", "Persistência", "Movimento lateral", "Exfiltração", "Acesso inicial"]
+        return [{"categoria": c, "n": r.randint(3, 120)} for c in cats]
+
+    # Command Center em modo demo: as mesmas formas que o CortexClient devolve.
+    def cases_by_status_severity(self, since_ms):
+        c = {}
+        for i in self._incidents:
+            if i["creation_time"] >= since_ms:
+                k = (i["status"], i["severity"].upper())
+                c[k] = c.get(k, 0) + 1
+        return [{"status": st, "severity": sv, "n": n} for (st, sv), n in c.items()]
+
+    def open_by_severity_all(self):
+        return self.cases_by_status_severity(0)
+
+    def ingestion(self, since_ms, until_ms=None):
+        r = random.Random(since_ms // 3_600_000)
+        until_ms = until_ms or self.now()
+        hours = [{"hora": h, "events": r.uniform(2.2e7, 3.4e7), "bytes": r.uniform(1.5e10, 2.3e10)}
+                 for h in range(since_ms // 3_600_000, until_ms // 3_600_000)]
+        return {"events": sum(h["events"] for h in hours), "bytes": sum(h["bytes"] for h in hours), "hours": hours}
+
+    def data_sources(self, since_ms, top=10):
+        r = random.Random(7)
+        names = [("PANW", "NGFW"), ("VMware", "vCenter"), ("Microsoft", "Windows"), ("F5", "BIG-IP"),
+                 ("Silverfort", "Admin"), ("Cisco", "IP Flow"), ("Microsoft", "NPS")]
+        return sorted(({"vendor": v, "product": p, "events": r.uniform(1e6, 3e8), "bytes": r.uniform(1e8, 2e11)}
+                       for v, p in names), key=lambda x: -x["events"])
+
+    def count_open_before(self, until_ms):
+        return sum(1 for i in self._incidents if i["status"] in ("new", "under_investigation")
+                   and i["creation_time"] < until_ms)
+
+    def alerts_inserted_since(self, since_ms, max_pages):
+        return [a for a in self._alerts if a["local_insert_ts"] >= since_ms], False
 
     def alerts_created_since(self, since_ms, max_pages):
         return [a for a in self._alerts if a["detection_timestamp"] >= since_ms], False

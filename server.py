@@ -22,6 +22,8 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 import aggregate as agg
 from briefing import Briefing
 from store import Store, now_ms
+from xsiam_dashboards import DashboardRunner
+from command_center import CommandCenter
 
 log = logging.getLogger("azores-cyber-360")
 PUBLIC = Path(__file__).resolve().parent / "public"
@@ -127,7 +129,15 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
         m, m_at = store.metrics_snapshot()
         now = now_ms()
         resolved = m["resolved"] if m else None
-        return jsonify(meta({"severity": agg.severity_counts(inc),
+        with store.lock:
+            backlog = {"count": store.backlog, "at": store.backlog_at}
+        # Os cartões contam os casos abertos criados hoje (meia-noite dos
+        # Açores); o total da janela de 90 dias vai no texto pequeno. Pedido do
+        # Miguel a 2026-09-30: os 90 dias liam-se como «agora».
+        today0 = agg.local_midnight_ms(now_ms())
+        return jsonify(meta({"severity": agg.severity_counts(inc, since=today0),
+                             "open_window": sum(1 for i in inc if agg.is_open(i)),
+                             "backlog": backlog,
                              "prevention": agg.prevention(resolved, al, now),
                              "mttr": agg.mttr(resolved),
                              "metrics_at": m_at,
@@ -169,6 +179,29 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
     def radar():
         m, m_at = store.metrics_snapshot()
         return jsonify(meta(metrics_meta(agg.radar(m["tactics"] if m else [], now_ms()), m_at)))
+
+    # Dashboards do XSIAM exportados da consola (ver xsiam_dashboards.py).
+    dash_dir = Path(os.environ.get("XSIAM_DASHBOARDS_DIR") or Path(__file__).resolve().parent / "dashboards")
+    runner = DashboardRunner(source, dash_dir)
+    app.config["dashboards"] = runner
+
+    cc = CommandCenter(source, store)
+    app.config["command_center"] = cc
+
+    @app.get("/api/command-center")
+    def command_center():
+        return jsonify(meta(cc.payload()))
+
+    @app.get("/api/paineis")
+    def paineis():
+        return jsonify(meta({"dashboards": runner.listing(), "folder": dash_dir.name}))
+
+    @app.get("/api/paineis/<did>")
+    def painel(did):
+        d = runner.dashboard(did)
+        if d is None:
+            return jsonify({"error": "dashboard não encontrado"}), 404
+        return jsonify(meta(d))
 
     @app.get("/api/briefing")
     def briefing():
@@ -256,6 +289,23 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
                 generate()
 
         threading.Thread(target=briefing_loop, name="briefing", daemon=True).start()
+
+        reconcile_s = int(os.environ.get("RECONCILE_MINUTES", 30)) * 60
+
+        def reconcile_loop():
+            # À parte da sincronização de cada minuto: a lista completa e a
+            # contagem do histórico levam ~2 min e não podem atrasá-la.
+            import time
+            while store.stages != []:
+                time.sleep(5)
+            while True:
+                store.reconcile()
+                store.reconcile_alerts()
+                time.sleep(reconcile_s)
+
+        threading.Thread(target=reconcile_loop, name="reconcile", daemon=True).start()
+        threading.Thread(target=runner.run_forever, name="paineis", daemon=True).start()
+        threading.Thread(target=cc.run_forever, name="command-center", daemon=True).start()
     return app
 
 

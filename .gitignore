@@ -11,6 +11,9 @@ logs/
 *.log
 *.tmp
 
+# Dashboards exportados do XSIAM: as consultas podem ter hosts e IPs internos.
+dashboards/*.json
+
 # Binário de terceiros que o INSTALACAO.md manda descarregar.
 windows/nssm.exe
 

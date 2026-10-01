@@ -39,6 +39,17 @@ O ecrã escala com a resolução: fica igual num 1080p e num 4K, sem scroll. No
 browser da TV, o zoom tem de estar a 100% e convém usar o modo kiosk (no
 Windows, ver `INSTALACAO.md`).
 
+## Modo leve
+
+Para ver o painel por ambiente de trabalho remoto (xrdp: a sessão desenha em
+software, mesmo numa máquina com GPU de cálculo),
+onde cada píxel que se mexe é desenhado pelo CPU e enviado pela rede: o botão
+«Modo leve» no rodapé (ou `?leve` na URL; `?leve=0` desliga) desliga as
+animações decorativas e faz as listas avançar uma linha a cada 4 s, em vez de
+deslizarem. O browser guarda a escolha. Medido (2026-10-01, 5 s): painel
+principal 1 619 → 46 ms de trabalho, Command Center 1 759 → 7 ms. A TV não
+precisa dele.
+
 ## Reinícios
 
 O estado (casos abertos, alertas de 24h, métricas e briefing) grava-se em
@@ -61,7 +72,10 @@ no perfil do browser da TV.
 Na consola do XSIAM, em Settings → Configurations → API Keys. O papel da chave
 tem de ler **casos e alertas**. Se só ler alertas, os contadores ficam a zero
 sem erro nenhum. `CORTEX_AUTH` tem de coincidir com o tipo da chave
-(standard/advanced).
+(standard/advanced). Se estiver errado, o servidor tenta o outro tipo e avisa
+no log. A chave tem de ver **todos** os casos: com um papel limitado, a API
+omite os casos que não pode ver, sem erro, e os contadores ficam abaixo do
+real (a 2026-09-30 viam 5 378 de 59 612).
 
 ## Como os dados chegam
 
@@ -79,6 +93,11 @@ de 100 demora 8–18 s:
   radar, MTTR e Auto contido. Cada consulta custa uma fração mínima da quota
   (ver `remaining_quota` no log).
 
+De 30 em 30 minutos (`RECONCILE_MINUTES`) há uma **reconciliação**. Pede a
+lista completa dos abertos da janela e tira da cache os que já não existem
+(fundidos ou apagados; a sincronização incremental nunca os vê). O log regista
+quantos saíram. Na mesma altura conta o histórico.
+
 O `total_count` da API **não é fiável**: vinha até 7× abaixo do real. A
 paginação segue até vir uma página incompleta, com um teto
 (`MAX_*_PAGES`). Se o teto for atingido, o painel mostra «dados truncados».
@@ -87,7 +106,9 @@ paginação segue até vir uma página incompleta, com um teto
 
 | No ecrã | O que conta |
 |---|---|
-| Crítico / Alto / Médio / Baixo | Casos com estado `new` ou `under_investigation` |
+| Crítico / Alto / Médio / Baixo | Casos com estado `new` ou `under_investigation` **criados hoje** (desde a meia-noite dos Açores; voltam a zero à meia-noite) |
+| «N em 90 dias» | Todos os casos abertos criados nos últimos 90 dias. É esta a janela da tabela Casos; os cartões e a tabela vêm da mesma recolha |
+| «+ N antigos por resolver» | Casos abertos criados há mais de 90 dias (o histórico acumulado), contados à parte a cada reconciliação |
 | Auto contido | Casos resolvidos nas últimas 24h com um estado `resolved_*auto*` (XQL) |
 | Ameaças bloqueadas | Alertas das últimas 24h com categoria de malware, spyware, vírus ou WildFire e ação *Blocked*/*Prevented*. Inclui o Anti-Spyware da NGFW |
 | MTTR | **Mean Time To Resolve**: da criação à resolução, só casos resolvidos nas últimas 24h, sem os automáticos nem os duplicados (XQL). Acima de 120 min aparece em horas |
@@ -95,6 +116,33 @@ paginação segue até vir uma página incompleta, com um teto
 | Alertas mais críticos | Alertas das últimas 24h, os mais graves e recentes primeiro. O mesmo alerta no mesmo host junta-se numa linha, com «×N» |
 | MITRE, radar | Casos, pelas táticas e técnicas que o XSIAM lhes atribui. Um caso com duas táticas conta nas duas |
 | Estado da API | Verde: última sincronização correu bem há menos de 10 min. Amarelo: falhou, ou está parada há mais de 10 min. Vermelho: falha e mais de 10 min sem dados, ou o servidor não responde |
+
+## Dashboards do XSIAM (segunda página)
+
+O primeiro separador é o **XSIAM Command Center**, uma réplica do dashboard
+pré-definido da consola (esse não se exporta), calculada pelas nossas fontes.
+Foi conferido contra uma captura da consola (2026-09-30): casos abertos por
+severidade e ingestão batem (±1%). Casos de 24h (+18%), Issues (−8%) e
+Prevented Events (−8%) usam definições que não se conseguiram reproduzir, e
+cada número diz a sua definição (ao passar o rato). O visual segue o da consola: fontes de dados → Issues → Cases → Automated/Manual → Resolved/Open, com a faixa de ingestão, casos abertos e eventos prevenidos em baixo; cada fonte mostra o seu logótipo, se houver um em `public/assets/icones-fontes/` (ver o `LEIA-ME.txt` dessa pasta), ou um círculo com a inicial. Thread própria, de 15 em 15 min, só com consultas
+baratas (~0,02 de quota); os alertas vêm da recolha do painel principal.
+
+O botão «Dashboards XSIAM ›» no rodapé abre `paineis.html`, que mostra
+dashboards do XSIAM com os dados atuais. A API de dashboards do XSIAM exige o
+papel Instance Administrator, que não se dá a uma chave guardada no PC da TV.
+Por isso:
+
+1. Na consola do XSIAM: Dashboards → o dashboard → ⋯ → **Export**.
+2. Pôr o `.json` em `dashboards/` (ou em `XSIAM_DASHBOARDS_DIR`). Os ficheiros
+   ficam fora do git, porque as consultas podem ter hosts e IPs internos.
+3. Na atualização seguinte (de 15 em 15 min), o servidor corre a consulta XQL
+   de cada widget com a chave de sempre e a página desenha-os: número, pizza,
+   colunas, linha ou tabela, conforme a forma dos dados.
+
+Só os widgets XQL se podem reproduzir; os pré-definidos aparecem como «não
+suportado». Cada widget gasta quota XQL a cada atualização (sobre `alerts`,
+cerca de 20× mais do que sobre `incidents`). O formato foi escrito a partir da
+documentação da API; confirmar com o primeiro export real.
 
 ## Briefing
 
@@ -115,7 +163,9 @@ O modelo tem de estar descarregado no Ollama: `ollama pull llama3.2:3b`.
 
 ## Por confirmar
 
-- Programa de financiamento: o rodapé mostra a barra **Açores 2030 /
-  Cofinanciado pela UE** (`Fotos/`), não uma barra PRR. Confirmar qual é.
+- O rodapé mostra a barra oficial do **PRR** (`public/assets/barra-prr.png`,
+  reduzida da original em `Fotos/`), mas o texto diz «Cofinanciado no âmbito
+  do PRR», e a barra diz «Financiado pela União Europeia». Confirmar qual é a
+  formulação certa.
 - O Chart.js vem do jsDelivr. Se o posto do monitor não tiver acesso à
   Internet, é preciso copiá-lo para `public/`.

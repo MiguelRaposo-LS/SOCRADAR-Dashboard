@@ -36,9 +36,17 @@ ALERT_WINDOW_MS = 25 * agg.HOUR  # 24h + margem para a última hora
 OVERLAP_MS = 10 * agg.MIN
 STALE_MS = 10 * agg.MIN  # mais do que isto sem sincronizar = degradado
 METRICS_INTERVAL_MS = 15 * agg.MIN
+# «Casos abertos» é a carga de trabalho atual: só os abertos criados nos
+# últimos 90 dias. A 2026-09-30, 59 008 dos 59 612 abertos eram mais antigos
+# (94% já no dia anterior) — contados à parte, como histórico por resolver.
+OPEN_WINDOW_MS = 90 * agg.DAY
 # Um estado guardado mais velho do que isto não se retoma: o incremental a
 # partir dele seria maior do que uma recolha completa.
 RESUME_MAX_AGE_MS = 24 * agg.HOUR
+# De quanto em quanto tempo se voltam a pedir todos os alertas de 24h (corrige
+# o que o incremental tenha perdido; ~7 min de pedidos, na thread da
+# reconciliação).
+ALERTS_FULL_MS = 6 * agg.HOUR
 
 
 def now_ms() -> int:
@@ -73,6 +81,13 @@ class Store:
         # disco tem last_ok, mas é de antes do reinício.
         self.fresh = False
 
+        # Casos abertos criados antes da janela (o histórico acumulado): só a
+        # contagem, feita pela reconciliação.
+        self.backlog: int | None = None
+        self.backlog_at: int | None = None
+        self.last_reconcile: int | None = None
+        self.last_alerts_full: int | None = None
+
         self.metrics: dict | None = None
         self.metrics_at: int | None = None
         self.metrics_error: str | None = None
@@ -80,7 +95,8 @@ class Store:
 
     def _plan(self, t0: int) -> list:
         return [
-            ("casos abertos", lambda: self._load_open(self.source.open_incidents(self.max_incident_pages))),
+            ("casos abertos", lambda: self._load_open(
+                self.source.open_incidents(self.max_incident_pages, since_ms=t0 - OPEN_WINDOW_MS))),
             ("alertas de 24h", lambda: self._load_alerts(t0 - ALERT_WINDOW_MS)),
         ]
 
@@ -156,6 +172,83 @@ class Store:
             with self.lock:
                 self.metrics_error = type(exc).__name__
 
+    def reconcile(self) -> None:
+        """Pede a lista completa de casos abertos da janela e alinha a cache.
+
+        A sincronização incremental só vê casos que *mudaram*: um caso fundido
+        noutro ou apagado nunca volta a aparecer e ficava aberto para sempre (a
+        2026-09-30 eram 17 fantasmas, que sobreviviam a reinícios). Aqui, o
+        que está na cache e não vem na lista sai, e fica no log.
+        Aproveita-se para contar o histórico (abertos com mais de 90 dias).
+        """
+        t = now_ms()
+        try:
+            raws, truncated = self.source.open_incidents(self.max_incident_pages, since_ms=t - OPEN_WINDOW_MS)
+        except CortexError as exc:
+            log.error("Reconciliação falhou (%s): %s", exc.kind, exc)
+            return
+        fresh = {}
+        for raw in raws:
+            inc = agg.norm_incident(raw)
+            if agg.is_open(inc):
+                fresh[inc["id"]] = inc
+        with self.lock:
+            if truncated:
+                # Com a lista cortada não se sabe o que é fantasma: não se tira nada.
+                log.warning("Reconciliação: lista de abertos truncada no teto; nada removido.")
+                self.incidents.update(fresh)
+            else:
+                ghosts = sorted(set(self.incidents) - set(fresh))
+                added = len(set(fresh) - set(self.incidents))
+                self.incidents = fresh
+                self._prune(t)
+                if ghosts:
+                    log.warning("Reconciliação: %d caso(s) fantasma removido(s) (já não estão abertos "
+                                "no XSIAM): %s", len(ghosts), ", ".join(ghosts[:20]) + (" …" if len(ghosts) > 20 else ""))
+                else:
+                    log.info("Reconciliação: sem casos fantasma (%d abertos na janela, %d novos).", len(fresh), added)
+            self.truncated["incidents"] = truncated
+            self.last_reconcile = t
+            # As recusas (403) também envelhecem: a 2026-09-30 a chave passou a
+            # ver todos os casos, mas os já marcados só voltavam a ser pedidos
+            # se o caso mudasse. A cada reconciliação voltam a ser tentados.
+            self.denied.clear()
+        try:
+            n = self.source.count_open_before(t - OPEN_WINDOW_MS)
+        except CortexError as exc:
+            log.error("Contagem do histórico de abertos falhou (%s): %s", exc.kind, exc)
+            return
+        with self.lock:
+            self.backlog, self.backlog_at = n, now_ms()
+        log.info("Histórico: %d caso(s) abertos com mais de 90 dias.", n)
+
+    def reconcile_alerts(self, force: bool = False) -> None:
+        """Volta a pedir todos os alertas de 24h e alinha a cache com eles.
+
+        Mantém os que chegaram pelo incremental enquanto isto corria. O log diz
+        quantos faltavam: se for muitos com frequência, o incremental está a
+        perder alertas outra vez.
+        """
+        t = now_ms()
+        if not force and self.last_alerts_full and t - self.last_alerts_full < ALERTS_FULL_MS:
+            return
+        try:
+            raws, truncated = self.source.alerts_created_since(t - ALERT_WINDOW_MS, self.max_alert_pages)
+        except CortexError as exc:
+            log.error("Recolha completa dos alertas falhou (%s): %s", exc.kind, exc)
+            return
+        fresh = {a["id"]: a for a in map(agg.norm_alert, raws)}
+        with self.lock:
+            missing = len(set(fresh) - set(self.alerts))
+            recent = {k: v for k, v in self.alerts.items()
+                      if k not in fresh and (v["created"] or 0) >= t - OVERLAP_MS}
+            self.alerts = {**fresh, **recent}
+            self.truncated["alerts"] = truncated
+            self.last_alerts_full = t
+            total = len(self.alerts)
+        (log.warning if missing > total * 0.05 else log.info)(
+            "Recolha completa dos alertas: %d em 24h, %d que a cache não tinha.", total, missing)
+
     def _load_open(self, result) -> None:
         raws, truncated = result
         with self.lock:
@@ -168,7 +261,9 @@ class Store:
         with self.lock:
             for raw in raws:
                 inc = agg.norm_incident(raw)
-                if agg.is_open(inc):
+                # Aberto e dentro da janela; um caso antigo que mudou (mas
+                # continua aberto) pertence ao histórico, não à carga atual.
+                if agg.is_open(inc) and (inc["created"] or 0) >= now_ms() - OPEN_WINDOW_MS:
                     self.incidents[inc["id"]] = inc
                 else:
                     # ~5 mil casos fecham por dia; guardá-los era encher a
@@ -186,12 +281,20 @@ class Store:
         since = self.watermark - OVERLAP_MS
         changed, _ = self.source.incidents_modified_since(since, self.max_incident_pages)
         self._load_changed(changed)
-        self._load_alerts(since)
+        raws, truncated = self.source.alerts_inserted_since(since, self.max_alert_pages)
+        with self.lock:
+            for a in map(agg.norm_alert, raws):
+                self.alerts[a["id"]] = a
+            self.truncated["alerts"] |= truncated
         with self.lock:
             self.watermark = started
             self._prune(started)
 
     def _prune(self, now: int) -> None:
+        # Um caso que passa dos 90 dias sai da janela (a reconciliação seguinte
+        # já o conta no histórico).
+        inc_floor = now - OPEN_WINDOW_MS
+        self.incidents = {k: v for k, v in self.incidents.items() if (v["created"] or 0) >= inc_floor}
         al_floor = now - ALERT_WINDOW_MS
         self.alerts = {k: v for k, v in self.alerts.items() if (v["created"] or 0) >= al_floor}
         self.extra = {k: v for k, v in self.extra.items() if k in self.incidents}
@@ -269,6 +372,8 @@ class Store:
                 "denied": self.denied, "truncated": self.truncated,
                 "last_ok": self.last_ok, "watermark": self.watermark,
                 "metrics": self.metrics, "metrics_at": self.metrics_at,
+                "backlog": self.backlog, "backlog_at": self.backlog_at,
+                "last_alerts_full": self.last_alerts_full,
                 "bootstrapped": self.stages == [],
             }
             data = json.dumps(state, ensure_ascii=False).encode()
@@ -305,6 +410,14 @@ class Store:
             self.watermark = state["watermark"]
             self.metrics = state["metrics"]
             self.metrics_at = state["metrics_at"]
+            # Sem registo de uma recolha completa (estados de antes desta
+            # correção) → a primeira reconciliação faz uma.
+            self.last_alerts_full = state.get("last_alerts_full")
+            self.backlog = state.get("backlog")
+            self.backlog_at = state.get("backlog_at")
+            # Estados gravados antes da janela de 90 dias tinham o histórico
+            # todo misturado nos abertos.
+            self._prune(now_ms())
             self.stages = []  # recolha inicial já feita: segue em incremental
         log.info("Estado retomado de há %d min: %d casos abertos, %d alertas.",
                  age // agg.MIN, len(self.incidents), len(self.alerts))
@@ -346,4 +459,6 @@ class Store:
         return {"state": state, "last_ok": last_ok, "server_time": now,
                 "error": err, "truncated": truncated, "warnings": warnings,
                 "metrics_at": m_at,
+                "backlog": self.backlog, "backlog_at": self.backlog_at,
+                "open_window_days": OPEN_WINDOW_MS // agg.DAY,
                 "stale_after_ms": STALE_MS}

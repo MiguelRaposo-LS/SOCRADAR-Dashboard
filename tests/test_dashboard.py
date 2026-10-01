@@ -350,9 +350,10 @@ def test_arranque_por_fases_e_metricas_logo_a_seguir():
 def test_so_se_guardam_casos_abertos():
     s = Store(DemoSource())
     sync_all(s)
-    s._load_changed([{"incident_id": "x1", "status": "new", "severity": "high"}])
+    t = int(__import__("time").time() * 1000)
+    s._load_changed([{"incident_id": "x1", "status": "new", "severity": "high", "creation_time": t}])
     assert "x1" in s.incidents
-    s._load_changed([{"incident_id": "x1", "status": "resolved_auto_resolve", "severity": "high"}])
+    s._load_changed([{"incident_id": "x1", "status": "resolved_auto_resolve", "severity": "high", "creation_time": t}])
     assert "x1" not in s.incidents
 
 
@@ -513,3 +514,280 @@ def test_so_o_proprio_pc_entra_sem_palavra_passe_e_so_se_ligado(monkeypatch):
         assert c.get("/api/ping", environ_base={"REMOTE_ADDR": "127.0.0.1"}).status_code == local
         assert c.get("/api/ping", environ_base={"REMOTE_ADDR": "10.1.2.3"}).status_code == remoto
         assert c.get("/api/ping", environ_base={"REMOTE_ADDR": "10.1.2.3"}, headers=auth()).status_code == 200
+
+
+def test_401_tenta_o_outro_tipo_de_chave(caplog):
+    from cortex_client import CortexClient
+    cli = CortexClient("https://x", "k", "1", auth="advanced")
+    class R:
+        def __init__(self, code): self.status_code = code
+        def json(self): return {"reply": {"ok": True}}
+    cli._send = lambda path, data, adv: R(401 if adv else 200)
+    with caplog.at_level("WARNING"):
+        assert cli._post("/p", {}) == {"ok": True}
+    assert cli._advanced is False and "CORTEX_AUTH=standard" in caplog.text
+    cli._send = lambda path, data, adv: R(401)
+    with pytest.raises(CortexError) as e:
+        cli._post("/p", {})
+    assert e.value.kind == "auth" and cli._advanced is False  # não fica trocado se nenhum serve
+
+
+def test_401_em_paralelo_nao_troca_o_tipo_duas_vezes():
+    # 8 pedidos em paralelo, todos enviados como «standard» antes da troca:
+    # todos têm de acabar bem e o tipo tem de ficar em «advanced».
+    import threading
+    from cortex_client import CortexClient
+    cli = CortexClient("https://x", "k", "1", auth="standard")
+    class R:
+        def __init__(self, code): self.status_code = code
+        def json(self): return {"reply": {"ok": True}}
+    barrier = threading.Barrier(8)
+    def send(path, data, adv):
+        if not adv:
+            try: barrier.wait(timeout=2)
+            except threading.BrokenBarrierError: pass
+            return R(401)
+        return R(200)
+    cli._send = send
+    results = []
+    ts = [threading.Thread(target=lambda: results.append(cli._post("/p", {}))) for _ in range(8)]
+    for t in ts: t.start()
+    for t in ts: t.join()
+    assert results == [{"ok": True}] * 8 and cli._advanced is True
+
+
+# --- janela de 90 dias, reconciliação e histórico ------------------------------
+
+def test_reconciliacao_remove_fantasmas_e_regista(caplog):
+    s = Store(DemoSource())
+    sync_all(s)
+    now = int(__import__("time").time() * 1000)
+    ghost = agg.norm_incident({"incident_id": "fantasma-1", "status": "new", "severity": "high",
+                               "creation_time": now - agg.DAY})
+    s.incidents["fantasma-1"] = ghost
+    with caplog.at_level("INFO", logger="store"):
+        s.reconcile()
+    assert "fantasma-1" not in s.incidents
+    assert any("1 caso(s) fantasma removido(s)" in r.getMessage() and "fantasma-1" in r.getMessage()
+               for r in caplog.records)
+    assert s.backlog is not None and s.backlog_at is not None
+
+
+def test_reconciliacao_com_lista_truncada_nao_remove_nada():
+    src = DemoSource()
+    s = Store(src)
+    sync_all(s)
+    s.incidents["fantasma-2"] = agg.norm_incident({"incident_id": "fantasma-2", "status": "new",
+                                                   "creation_time": int(__import__("time").time() * 1000)})
+    src.open_incidents = lambda *a, **k: ([], True)
+    s.reconcile()
+    assert "fantasma-2" in s.incidents
+
+
+def test_janela_de_90_dias():
+    import store as st
+    s = Store(DemoSource())
+    sync_all(s)
+    now = int(__import__("time").time() * 1000)
+    old = {"incident_id": "velho", "status": "new", "creation_time": now - 91 * agg.DAY}
+    recent = {"incident_id": "recente", "status": "new", "creation_time": now - 89 * agg.DAY}
+    s._load_changed([old, recent])
+    assert "velho" not in s.incidents and "recente" in s.incidents
+    # passa dos 90 dias → sai na limpeza seguinte
+    s._prune(now + 2 * agg.DAY)
+    assert "recente" not in s.incidents
+    assert all((i["created"] or 0) >= now - st.OPEN_WINDOW_MS for i in s.snapshot()[0])
+
+
+@pytest.mark.parametrize("total", [0, 37, 100, 6400, 59612])
+def test_contagem_por_bisseccao(total):
+    from cortex_client import CortexClient
+    cli = CortexClient("https://x", "k", "1")
+    calls = []
+    def fake(path, data):
+        calls.append(data["search_from"])
+        lo, hi = data["search_from"], min(data["search_to"], total)
+        return {"total_count": 728, "incidents": [{}] * max(0, hi - lo)}
+    cli._post = fake
+    assert cli.count_open_before(0) == total
+    assert len(calls) < 25  # bissecção, não paginação completa
+
+
+def test_summary_tem_o_historico(client):
+    b = client.get("/api/summary", headers=auth()).json["backlog"]
+    assert set(b) == {"count", "at"}
+
+
+def test_contadores_do_dia():
+    today0 = agg.local_midnight_ms(SUMMER)
+    incs = [inc(1, "critical", created=today0 + agg.HOUR), inc(2, "high", created=today0 - agg.MIN),
+            inc(3, "high", status="resolved_other", created=today0 + agg.HOUR)]
+    assert agg.severity_counts(incs, since=today0) == {"critical": 1, "high": 0, "medium": 0, "low": 0}
+    assert agg.severity_counts(incs)["high"] == 1  # sem «since», a janela toda
+
+
+# --- dashboards exportados do XSIAM (página «Dashboards XSIAM») -----------------
+
+import json as _json
+import xsiam_dashboards as xd
+
+EXPORT = {"dashboards_data": [{"name": "SOC Overview", "description": "exemplo", "status": "ENABLED",
+                               "layout": [{"id": "row-1", "data": [{"key": "w-b"}, {"key": "w-a"}]},
+                                          {"id": "row-2", "data": [{"key": "w-c"}]}]}],
+          "widgets_data": [
+              {"widget_key": "w-a", "title": "Casos por tática", "time_frame": {"relativeTime": 7 * 86400000},
+               "data": {"phrase": "dataset = incidents | comp count() by x"}, "viewOptions": {"type": "pie"}},
+              {"widget_key": "w-b", "title": "Total", "data": {"phrase": "dataset = incidents | comp count()"}},
+              {"widget_key": "w-c", "title": "Pré-definido", "data": {}}]}
+
+
+def test_export_le_widgets_pela_ordem_do_layout(tmp_path):
+    f = tmp_path / "soc.json"
+    f.write_text(_json.dumps(EXPORT))
+    [d] = xd.load_export(f)
+    assert d["id"] == "soc-overview" and [w["key"] for w in d["widgets"]] == ["w-b", "w-a", "w-c"]
+    assert d["widgets"][1]["window_ms"] == 7 * 86400000 and d["widgets"][0]["window_ms"] == xd.DEFAULT_WINDOW_MS
+
+
+def test_export_tambem_aceita_a_resposta_da_api_com_reply(tmp_path):
+    f = tmp_path / "api.json"
+    f.write_text(_json.dumps({"reply": EXPORT}))
+    assert xd.load_export(f)[0]["name"] == "SOC Overview"
+
+
+def test_ficheiro_mau_nao_derruba_os_outros(tmp_path):
+    (tmp_path / "bom.json").write_text(_json.dumps(EXPORT))
+    (tmp_path / "mau.json").write_text("{isto não é json")
+    assert [d["name"] for d in xd.load_dir(tmp_path)] == ["SOC Overview"]
+
+
+def test_widgets_correm_e_os_predefinidos_ficam_nao_suportados(tmp_path):
+    (tmp_path / "soc.json").write_text(_json.dumps(EXPORT))
+    class Src:
+        calls = []
+        def xql(self, q, rel):
+            self.calls.append((q, rel))
+            return [{"x": f"c{i}", "n": i} for i in range(500)]
+    src = Src()
+    r = xd.DashboardRunner(src, tmp_path)
+    r.reload(); r.refresh()
+    ws = {w["key"]: w for w in r.dashboard("soc-overview")["widgets"]}
+    assert len(src.calls) == 2                              # o pré-definido não corre
+    assert "não suportado" in ws["w-c"]["error"]
+    assert len(ws["w-a"]["rows"]) == xd.MAX_ROWS and ws["w-a"]["total"] == 500
+
+
+def test_rotas_dos_paineis(monkeypatch, tmp_path):
+    monkeypatch.setenv("DASHBOARD_PASSWORD", "segredo")
+    monkeypatch.setenv("XSIAM_DASHBOARDS_DIR", str(tmp_path))
+    (tmp_path / "soc.json").write_text(_json.dumps(EXPORT))
+    import server
+    app = server.create_app(source=DemoSource(), demo=True, start_sync=False)
+    runner = app.config["dashboards"]; runner.reload(); runner.refresh()
+    c = app.test_client()
+    assert c.get("/api/paineis", headers=auth()).json["dashboards"][0]["id"] == "soc-overview"
+    d = c.get("/api/paineis/soc-overview", headers=auth()).json
+    assert [w["title"] for w in d["widgets"]] == ["Total", "Casos por tática", "Pré-definido"]
+    assert c.get("/api/paineis/nao-existe", headers=auth()).status_code == 404
+    assert c.get("/api/paineis", headers=auth("errada")).status_code == 401
+
+
+def test_incremental_apanha_alertas_que_entram_atrasados():
+    import time as _t
+    src = DemoSource()
+    s = Store(src)
+    sync_all(s)
+    now = int(_t.time() * 1000)
+    late = {"alert_id": "atrasado-1", "name": "x", "severity": "high",
+            "detection_timestamp": now - 3 * agg.HOUR, "local_insert_ts": now}
+    src._alerts.append(late)
+    s.sync_once()
+    assert "atrasado-1" in s.alerts
+
+
+def test_recolha_completa_de_alertas_repoe_os_que_faltam(caplog):
+    s = Store(DemoSource())
+    sync_all(s)
+    before = dict(s.alerts)
+    for k in list(s.alerts)[: len(s.alerts) // 2]:
+        del s.alerts[k]
+    with caplog.at_level("INFO", logger="store"):
+        s.reconcile_alerts(force=True)
+    assert set(before) <= set(s.alerts)
+    assert any("que a cache não tinha" in r.getMessage() for r in caplog.records)
+
+
+# --- Command Center (réplica) -----------------------------------------------------
+
+import command_center as ccm
+
+
+def test_blocos_do_command_center():
+    rows = [{"status": "resolved_auto_resolve", "severity": "MEDIUM", "n": 3784},
+            {"status": "resolved_other", "severity": "HIGH", "n": 91},
+            {"status": "new", "severity": "CRITICAL", "n": 1}, {"status": "new", "severity": "LOW", "n": 2}]
+    c = ccm.cases_block(rows)
+    assert (c["total"], c["automated"], c["manual"], c["resolved"], c["open"]) == (3878, 3784, 94, 3875, 3)
+    assert c["open_severity"] == {"critical": 1, "high": 0, "medium": 0, "low": 2}
+    o = ccm.open_block([{"status": "new", "severity": "HIGH", "n": 43234},
+                        {"status": "resolved_other", "severity": "HIGH", "n": 99},
+                        {"status": "under_investigation", "severity": "CRITICAL", "n": 59}])
+    assert o == {"total": 43293, "severity": {"critical": 59, "high": 43234, "medium": 0, "low": 0}}
+    al = [agg.norm_alert({"alert_id": "1", "action": "PREVENTED__DROPPED_THE_SESSION_", "detection_timestamp": SUMMER}),
+          agg.norm_alert({"alert_id": "2", "action": "DETECTED__SINKHOLE_", "detection_timestamp": SUMMER}),
+          agg.norm_alert({"alert_id": "3", "action": "PREVENTED__BLOCKED_", "detection_timestamp": SUMMER - 2 * agg.DAY})]
+    assert ccm.alerts_block(al, SUMMER) == {"issues": 2, "prevented": 1}
+
+
+def test_rota_do_command_center(client):
+    app_cc = client.application.config["command_center"]
+    app_cc.refresh()
+    d = client.get("/api/command-center", headers=auth()).json
+    assert d["error"] is None and d["cases"]["total"] > 0 and d["open"]["total"] > 0
+    assert d["ingestion"]["events"] > 0 and len(d["sources"]) > 0 and d["alerts"]["issues"] >= 0
+
+
+def test_falha_do_command_center_nao_afeta_o_painel(client):
+    cc = client.application.config["command_center"]
+    def boom(*a, **k):
+        raise CortexError("http", "XSIAM respondeu 500")
+    cc.source = type("S", (), {"ingestion": boom})()
+    cc.refresh()
+    assert "500" in client.get("/api/command-center", headers=auth()).json["error"]
+    s = client.get("/api/summary", headers=auth())
+    assert s.status_code == 200 and s.json["status"]["state"] in ("operacional", "degradado")
+
+
+def test_icones_reconhecem_os_nomes_da_consola():
+    icons = {"ngfw": "a/ngfw.svg", "o365": "a/o365.svg", "o365_azure_application": "a/az.svg",
+             "microsoft_windows": "a/win.svg", "panw-ngfw": "a/exato.svg"}
+    assert ccm.match_icon("panw-ngfw", icons) == "a/exato.svg"
+    assert ccm.match_icon("msft-o365-contacts", icons) == "a/o365.svg"
+    assert ccm.match_icon("microsoft-windows", icons) == "a/win.svg"
+    assert ccm.match_icon("msft-azure-ad", icons) is None
+    assert ccm.match_icon("vmware-vcenter", icons) is None
+
+
+def test_icones_aceitam_sinonimos_e_sufixos():
+    icons = {"microsoft_azure": "a/az.webp", "ipicon": "a/ip.jpg", "netskope": "a/ns.jpg", "file": "a/file.svg"}
+    assert ccm.match_icon("msft-azure-ad", icons) == "a/az.webp"
+    assert ccm.match_icon("ip-flow-ip-flow", icons) == "a/ip.jpg"
+    assert ccm.match_icon("netskope-netskope", icons) == "a/ns.jpg"
+    assert ccm.match_icon("cloudflare-waf", icons) is None
+
+
+def test_icones_separam_palavras_pelas_maiusculas():
+    icons = {"MicrosoftAzure": "a/az.svg", "VMWARE vCenter": "a/vm.svg", "F5": "a/f5.svg"}
+    assert ccm.match_icon("msft-azure-ad", icons) == "a/az.svg"
+    assert ccm.match_icon("vmware-vcenter", icons) == "a/vm.svg"
+    assert ccm.match_icon("f5-lb", icons) == "a/f5.svg"
+
+
+def test_fontes_so_com_nome_nao_levam_icone(client):
+    cc = client.application.config["command_center"]
+    cc.refresh()
+    cc.data["sources"] = [{"vendor": "IP Flow", "product": "IP Flow", "events": 1, "bytes": 1},
+                          {"vendor": "PANW", "product": "NGFW", "events": 1, "bytes": 1}]
+    src = client.get("/api/command-center", headers=auth()).json["sources"]
+    assert src[0]["name_only"] is True and src[0]["icon"] is None
+    assert src[1]["name_only"] is False

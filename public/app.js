@@ -20,6 +20,32 @@ const SEV = {
 };
 const SEV_ORDER = ["low", "medium", "high", "critical"]; // de baixo para cima na pilha
 const $ = (id) => document.getElementById(id);
+// Modo leve (por browser): sem animações decorativas e com as listas a
+// avançar uma linha de cada vez em vez de deslizarem. Para ver o painel por
+// ambiente de trabalho remoto (xrdp: a sessão desenha em software, mesmo com
+// a L4 na máquina): aí cada píxel que se
+// mexe é desenhado pelo CPU e enviado pela rede, e o movimento contínuo
+// pesava muito (2026-10-01). A TV não precisa dele.
+// Liga-se com o botão «Modo leve» ou com ?leve na URL (?leve=0 desliga).
+const LEVE = (() => {
+  const q = new URLSearchParams(location.search);
+  try {
+    if (q.has("leve")) localStorage.setItem("ac360:leve", q.get("leve") === "0" ? "0" : "1");
+    return localStorage.getItem("ac360:leve") === "1";
+  } catch { return q.has("leve") && q.get("leve") !== "0"; }
+})();
+if (LEVE) document.documentElement.classList.add("leve");
+function toggleLeve() {
+  try { localStorage.setItem("ac360:leve", LEVE ? "0" : "1"); } catch { /* sem storage */ }
+  location.replace(location.pathname + location.search.replace(/[?&]leve(=[^&]*)?/g, "").replace(/^&/, "?"));
+}
+function wireLeve(id) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  b.textContent = LEVE ? "Modo leve: ligado" : "Modo leve: desligado";
+  b.setAttribute("aria-pressed", String(LEVE));
+  b.addEventListener("click", toggleLeve);
+}
 // Milhares com espaço (5 072, não 5072): lê-se de longe num monitor de parede.
 const nf = (n) => (n === null || n === undefined ? "–" : Number(n).toLocaleString("pt-PT"));
 
@@ -163,6 +189,15 @@ async function loadSummary() {
   applyStatus(d.status);
   if (!d.synced) return;
   for (const s of Object.keys(SEV)) $("k-" + s).textContent = nf(d.severity[s]);
+  // Histórico: abertos criados há mais de 90 dias, fora dos contadores.
+  // Por baixo dos cartões (que contam só os de hoje): o total da janela de
+  // 90 dias e o histórico acumulado, em texto pequeno.
+  const bl = d.backlog && d.backlog.count;
+  const parts = [];
+  if (d.open_window !== undefined) parts.push(`${nf(d.open_window)} em 90 dias`);
+  if (bl !== null && bl !== undefined) parts.push(`+ ${nf(bl)} antigos por resolver`);
+  $("k-backlog").hidden = !parts.length;
+  $("k-backlog").textContent = parts.join(" · ");
   // Auto contido e MTTR vêm das métricas XQL: «–» até à 1.ª consulta chegar.
   $("k-contained").textContent = nf(d.prevention.auto_contained);
   $("k-malware").textContent = nf(d.prevention.threats_blocked);
@@ -181,7 +216,8 @@ function applyStatus(st) {
   if (st.error) bits.push(`Último erro: ${st.error.message}`);
   bits.push(...(st.warnings || []));
   $("api-status").title = bits.join("\n") || "Sincronização sem erros";
-  $("foot-sync").textContent = st.error ? `⚠ ${st.error.message}` : (st.warnings || []).join(" · ");
+  // Os avisos e o último erro ficam no tooltip do estado da API (acima) e no
+  // log; o rodapé passou a ser só institucional.
   renderApiStatus();
 }
 
@@ -335,8 +371,10 @@ function scroller(view, block, pause) {
   let clone = null;
   let anim = null;
   let loop = 0;  // altura de uma volta, em px
+  let steps = [], step = 0;  // modo leve: o topo de cada linha, e a atual
 
   function position() {
+    if (LEVE) return steps.length ? steps[step] : 0;
     if (!anim || !loop) return 0;
     const d = anim.effect.getTiming().duration;
     return ((anim.currentTime || 0) % d) / d * loop;
@@ -355,6 +393,15 @@ function scroller(view, block, pause) {
     clone.setAttribute("aria-hidden", "true");
     block.after(clone);
     loop = clone.getBoundingClientRect().top - block.getBoundingClientRect().top;
+    if (LEVE) {
+      // Aos saltos: uma linha a cada SECONDS_PER_ROW, sem animação — uma
+      // atualização de ecrã a cada 4 s em vez de 60 por segundo.
+      const top0 = block.getBoundingClientRect().top;
+      steps = [...new Set([...block.children].map((r) => Math.round(r.getBoundingClientRect().top - top0)))].sort((a, b) => a - b);
+      step = Math.max(0, steps.findIndex((y) => y >= px % loop));
+      track.style.transform = `translate3d(0, ${-steps[step]}px, 0)`;
+      return;
+    }
     const rows = block.querySelectorAll("tr, .tac").length || 1;
     const duration = rows * SECONDS_PER_ROW * 1000;
     anim = track.animate(
@@ -366,6 +413,13 @@ function scroller(view, block, pause) {
 
   // A pausa só se consulta 4 vezes por segundo, e só se mexe na animação
   // quando o estado muda — nada corre por frame.
+  if (LEVE) {
+    setInterval(() => {
+      if (!steps.length || pause.paused || !view.offsetParent || document.hidden) return;
+      step = (step + 1) % steps.length;
+      track.style.transform = `translate3d(0, ${-steps[step]}px, 0)`;
+    }, SECONDS_PER_ROW * 1000);
+  }
   setInterval(() => {
     if (!anim) return;
     const hidden = !view.offsetParent;  // vista escondida (MITRE): não gasta
@@ -395,7 +449,7 @@ async function loadCases() {
   const d = await api("/api/cases");
   cases = d.cases;
   const openTotal = d.open_total ?? cases.length;
-  $("cases-count").textContent = `· ${openTotal.toLocaleString("pt-PT")} abertos`
+  $("cases-count").textContent = `· ${openTotal.toLocaleString("pt-PT")} abertos (90 dias)`
     + (openTotal > cases.length ? ` · os ${cases.length} mais graves` : "");
   renderCases();
 }
@@ -593,6 +647,7 @@ async function boot() {
   setInterval(refreshAll, REFRESH_MS);
 }
 
+wireLeve("btn-leve");
 scaleCharts();
 tick();
 setInterval(tick, 1000);

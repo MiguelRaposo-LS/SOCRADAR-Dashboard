@@ -168,8 +168,10 @@ def is_malware(alert: dict) -> bool:
     return any(w in cat for w in MALWARE_WORDS)
 
 
-def severity_counts(incidents: list[dict]) -> dict:
-    c = Counter(i["severity"] for i in incidents if is_open(i))
+def severity_counts(incidents: list[dict], since: int | None = None) -> dict:
+    """Casos abertos por severidade; só os criados desde `since`, se for dado."""
+    c = Counter(i["severity"] for i in incidents
+                if is_open(i) and (since is None or (i["created"] or 0) >= since))
     return {s: c.get(s, 0) for s in SEVERITIES}
 
 
