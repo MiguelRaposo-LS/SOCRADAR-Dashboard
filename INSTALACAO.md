@@ -18,6 +18,41 @@ dashboard só escuta em `127.0.0.1`.
 > em Linux; os passos Windows (NSSM, arranque, kiosk) estão por validar na
 > primeira instalação.
 
+## Instalação pelo script (PC Windows)
+
+Depois do Lubuntu (secção 1), o PC Windows instala-se com um duplo clique em
+`windows\instalar.cmd`. O script pede para correr como administrador e faz as
+secções 2, 3 e 4.2–4.3 deste manual:
+
+1. Copia o projeto para `C:\AzoresCyber360`. Não copia `.venv`, `estado`, `logs` nem um `.env` que já exista no destino.
+2. Instala o Python 3.12 pelo `winget`, se faltar.
+3. Cria o `.venv` e instala as dependências.
+4. Cria o `.env`, com uma palavra-passe aleatória, `HOST=127.0.0.1` e `DASHBOARD_LOCAL_NO_AUTH=1`.
+5. Fecha o `.env`, o `estado` e os `logs` ao SYSTEM e aos administradores.
+6. Descarrega o NSSM e instala o serviço com as definições da secção 3.
+7. Põe o browser em kiosk na pasta de arranque comum e tira o adormecer do ecrã.
+8. Abre o `.env` no Bloco de Notas para pores as credenciais do Cortex e o
+   `OLLAMA_URL`. Quando fechas, arranca o serviço e espera que responda.
+
+Se fechares o Bloco de Notas sem as credenciais, o serviço fica instalado mas
+parado. Corre o `instalar.cmd` outra vez depois de as pôr. O script pode
+correr-se as vezes que for preciso, também para atualizar: não mexe num `.env`
+que já exista nem no estado.
+
+Opções (numa PowerShell como administrador):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\instalar.ps1 -OllamaUrl http://<IP do Lubuntu>:11434
+powershell -ExecutionPolicy Bypass -File windows\instalar.ps1 -Destino D:\SOC -SemEcra   # só o servidor
+```
+
+Fica à mão só o início de sessão automático da TV (4.1), porque precisa da
+palavra-passe da conta. Se o NSSM não se conseguir descarregar (proxy), o
+script diz onde pôr o `nssm.exe`.
+
+As secções seguintes são o mesmo, passo a passo, para quando o script falhar
+ou para perceber o que ele faz.
+
 ---
 
 ## 1. Lubuntu: Ollama

@@ -8,6 +8,8 @@ rem palavra-passe do proprio PC estiver desligado).
 
 set URL=http://127.0.0.1:8360/
 set EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+rem Em instalacoes recentes o Edge esta em Program Files, e nao em (x86).
+if not exist "%EDGE%" set EDGE=C:\Program Files\Microsoft\Edge\Application\msedge.exe
 
 :espera
 powershell -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 '%URL%api/ping' | Out-Null; exit 0 } catch { if ($_.Exception.Response) { exit 0 } else { exit 1 } }" >nul 2>&1

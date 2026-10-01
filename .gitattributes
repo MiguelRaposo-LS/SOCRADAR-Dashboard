@@ -1,0 +1,4 @@
+# Os scripts do Windows têm de ir com CRLF: o cmd com fins de linha LF pode
+# falhar nos «goto», e assim um clone em Linux copiado para o Windows também serve.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

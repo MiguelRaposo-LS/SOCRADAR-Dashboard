@@ -5,7 +5,7 @@ O servidor Flask guarda a chave da API, sincroniza com o XSIAM a cada minuto e
 serve o ecrã. O browser nunca vê a chave.
 
 Instalação no PC Windows da TV (serviço, arranque automático, kiosk, Ollama
-noutra máquina): ver [INSTALACAO.md](INSTALACAO.md).
+noutra máquina): ver [INSTALACAO.md](INSTALACAO.md). Num PC Windows, `windows\instalar.cmd` faz quase tudo.
 
 ## Arrancar
 
