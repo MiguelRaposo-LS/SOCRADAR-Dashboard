@@ -194,18 +194,19 @@ h1, h2 { margin: 0; font-weight: 600; }
 .grid {
   flex: 1; min-height: 0;
   display: grid; gap: var(--gap); padding: 0 var(--gap);
-  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+  /* 1,75 : 1 — os casos, à direita, têm 8 colunas; o Command Center, à
+     esquerda, é limitado pela altura e não perde nada com a largura a menos. */
+  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
   grid-template-rows: repeat(10, minmax(0, 1fr));
 }
-/* O Command Center em cima (fluxo mais faixa precisam de altura), o volume e
-   os casos por baixo; o painel MITRE ATT&CK saiu (2026-10-01). */
-.p-cc     { grid-column: 1; grid-row: 1 / 5; padding: 0; }
-.p-volume { grid-column: 1; grid-row: 5 / 8; }
-.p-cases  { grid-column: 1; grid-row: 8 / 11; }
-.p-cc iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
-.p-top    { grid-column: 2; grid-row: 1 / 5; }
+/* À esquerda, o Command Center e o volume; à direita, os casos, o radar e o
+   briefing. O MITRE ATT&CK e os alertas mais críticos saíram (2026-10-01). */
+.p-cc     { grid-column: 1; grid-row: 1 / 8; padding: 0; }
+.p-volume { grid-column: 1; grid-row: 8 / 11; }
+.p-cases  { grid-column: 2; grid-row: 1 / 5; }
 .p-radar  { grid-column: 2; grid-row: 5 / 8; }
 .p-brief  { grid-column: 2; grid-row: 8 / 11; }
+.p-cc iframe { display: block; width: 100%; height: 100%; border: 0; background: var(--bg); }
 
 .panel {
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
@@ -251,10 +252,15 @@ col.c-sev { width: 1.8rem; }
 col.c-case { width: 28%; }
 col.c-age { width: 4.5rem; }
 col.c-state { width: 8rem; }
+/* Na coluna da direita (~1/3 do ecrã) as 8 colunas não cabiam com as larguras
+   de quando os casos ocupavam a largura da esquerda. */
+.p-cases .tbl { font-size: .8rem; }
+.p-cases .tbl th { letter-spacing: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-cases col.c-sev { width: 1.3rem; }
+.p-cases col.c-case { width: 27%; }
+.p-cases col.c-age { width: 3.4rem; }
+.p-cases col.c-state { width: 5.2rem; }
 col.c-n { width: 5rem; }
-.p-top .tbl th:nth-child(2) { width: 5.2rem; }
-.p-top .tbl th:nth-child(5) { width: 5.6rem; }
-.p-top .tbl th:nth-child(6) { width: 3.8rem; }
 
 .sev-dot {
   display: inline-block; width: .8rem; height: .8rem; border-radius: 50%;
@@ -409,31 +415,32 @@ html.leve .radar-varrimento, html.leve .radar-ponto, html.leve .cc-anel { animat
 html.leve .radar-ponto { opacity: .6; }
 
 /* paineis.html?embed: o Command Center dentro da página principal. Sem
-   cabeçalho nem nota. A faixa dos números vai para uma coluna à direita do
-   fluxo: por baixo, comia metade da altura e o diagrama ficava com 392×152 px
-   a 1920 (medido). O diagrama fica do tamanho que a caixa deixar — a largura
-   é a menor entre a disponível e a que a altura permite (viewBox 1600×620). */
+   cabeçalho nem nota; os quatro números numa linha compacta por baixo do
+   fluxo. O diagrama fica do tamanho que a caixa deixar — a largura é a menor
+   entre a disponível e a que a altura permite (viewBox 1600×620). */
 html.embed body.pagina-paineis { overflow: hidden; height: 100%; }
 html.embed .paineis-top, html.embed .cc-nota { display: none; }
 html.embed .paineis-grid { padding: 0; height: 100%; }
 html.embed .cc-palco { height: 100%; box-sizing: border-box; border: 0; border-radius: 0;
-  padding: 0.533rem 0.8rem; display: grid; column-gap: 0.8rem;
-  grid-template-columns: minmax(0, 1fr) 17rem; grid-template-rows: auto minmax(0, 1fr); }
-html.embed .cc-topo { grid-column: 2; grid-row: 1; flex-wrap: wrap; gap: 0.267rem; }
+  padding: 0.533rem 0.8rem; display: flex; flex-direction: column; }
 html.embed .cc-topo h2 { font-size: 1rem; font-weight: 600; }
-/* «Últimas 24 horas» numa etiqueta ocupava uma segunda linha na coluna. */
-html.embed .cc-janela { display: none; }
-html.embed .cc-topo h2::after { content: " · 24 h"; color: var(--ink-3); font-weight: 400; }
-html.embed .cc-flow-area { grid-column: 1; grid-row: 1 / 3; min-height: 0; container-type: size;
+html.embed .cc-janela { font-size: .75rem; padding: 0.133rem 0.533rem; }
+html.embed .cc-flow-area { flex: 1; min-height: 0; container-type: size;
   display: flex; justify-content: center; align-items: center; }
 html.embed .cc-flow-wrap { width: min(100cqw, calc(100cqh * 1600 / 620)); }
-html.embed .cc-faixa { grid-column: 2; grid-row: 2; display: flex; flex-direction: column;
-  justify-content: space-around; margin: 0; padding: 0; border-top: 0; }
-html.embed .cc-bloco { padding: 0.267rem 0; border-right: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+html.embed .cc-faixa { margin-top: 0.267rem; padding-top: 0.4rem;
+  /* Os casos abertos levam as quatro severidades ao lado do número: em
+     colunas iguais, o «1084» ficava por cima do número seguinte. */
+  grid-template-columns: 1fr 1fr; }
+/* Embutido, a faixa fica só com a ingestão: «Total Open Cases» e «Prevented
+   Events» saíram por pedido do Miguel (2026-10-01) — os casos abertos já
+   estão nos cartões do cabeçalho e as ameaças bloqueadas também. */
+html.embed .cc-bloco:nth-child(n + 3) { display: none; }
+html.embed .cc-bloco:nth-child(2) { border-right: 0; }
+html.embed .cc-bloco { padding: 0 0.8rem; }
 html.embed .cc-bl-t { font-size: .75rem; margin-bottom: 0.133rem; }
-html.embed .cc-bl-v { flex-wrap: wrap; row-gap: 0.133rem; }
-html.embed .cc-bl-v strong { white-space: nowrap; }
-html.embed .cc-bl-v strong { font-size: 1.25rem; }
+html.embed .cc-bl-v { flex-wrap: nowrap; }
+html.embed .cc-bl-v strong { font-size: 1.25rem; white-space: nowrap; }
 html.embed .cc-spark { width: 5rem; height: 1.2rem; }
 html.embed .cc-chev, html.embed .cc-chev strong { font-size: .75rem; }
 html.embed .cc-sevs { gap: 0.4rem; }

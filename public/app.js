@@ -492,21 +492,6 @@ $("cases-table").addEventListener("click", (e) => {
   renderCases();
 });
 
-/* ---------------- alertas mais críticos ---------------- */
-
-async function loadTop() {
-  const d = await api("/api/top-alerts");
-  $("top-body").innerHTML = d.alerts.length
-    ? d.alerts.map((a) => `<tr>
-        <td>${sevDot(a.severity)}</td>
-        <td class="id">${esc(a.id)}</td>
-        <td title="${esc(a.name)}${a.count > 1 ? ` — ${a.count} vezes nas últimas 24h` : ""}">${a.count > 1 ? `<span class="rep">×${nf(a.count)}</span> ` : ""}${esc(a.name)}</td>
-        <td title="${esc([a.host, a.user].filter(Boolean).join(" · "))}">${dash([a.host, a.user].filter(Boolean).join(" · "))}</td>
-        <td title="${esc(a.technique)}">${a.technique_id ? `<span class="tech-id">${esc(a.technique_id)}</span>` : '<span class="muted">—</span>'}</td>
-        <td class="num">${age(a.created)}</td></tr>`).join("")
-    : '<tr><td colspan="6" class="empty">Sem alertas nas últimas 24h.</td></tr>';
-}
-
 /* ---------------- radar ---------------- */
 
 let radarChart = null;
@@ -576,7 +561,7 @@ function fail(err) { if (!(err instanceof NotSynced)) console.error(err); }
 
 async function refreshAll() {
   const results = await Promise.allSettled([
-    loadSummary(), loadVolume(), loadCases(), loadTop(), loadRadar(), loadBriefing(),
+    loadSummary(), loadVolume(), loadCases(), loadRadar(), loadBriefing(),
   ]);
   // Se nenhum pedido chegou ao servidor, é o servidor que está em baixo — não
   // o XSIAM — e o ecrã tem de o dizer em vez de mostrar os números antigos

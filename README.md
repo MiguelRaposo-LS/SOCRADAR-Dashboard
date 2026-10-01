@@ -84,8 +84,9 @@ de 100 demora 8–18 s:
 
 - **API paginada**, só para o que tem de ser linha a linha:
   - os casos abertos, que alimentam os contadores, a tabela e o briefing;
-  - os alertas das últimas 24h, que alimentam os «Alertas mais críticos» e as
-    «Ameaças bloqueadas».
+  - os alertas das últimas 24h, que alimentam as «Ameaças bloqueadas» e os
+    Issues e Prevented Events do Command Center. (A tabela «Alertas mais
+    críticos» saiu do ecrã a 2026-10-01; o `/api/top-alerts` continua.)
 
   Estes dados leem-se por inteiro no arranque (~6 min). Depois, a cada minuto,
   só o que mudou.
@@ -119,13 +120,13 @@ paginação segue até vir uma página incompleta, com um teto
 
 ## XSIAM Command Center
 
-No topo do painel principal, no lugar onde estava o MITRE ATT&CK (que saiu a
-2026-10-01), está o **XSIAM Command Center**, uma réplica do dashboard
+No topo da coluna esquerda do painel principal, por cima do volume, está o
+**XSIAM Command Center**, uma réplica do dashboard
 pré-definido da consola (esse não se exporta), calculada pelas nossas fontes.
 Foi conferido contra uma captura da consola (2026-09-30): casos abertos por
 severidade e ingestão batem (±1%). Casos de 24h (+18%), Issues (−8%) e
 Prevented Events (−8%) usam definições que não se conseguiram reproduzir, e
-cada número diz a sua definição (ao passar o rato). O visual segue o da consola: fontes de dados → Issues → Cases → Automated/Manual → Resolved/Open, com os números de ingestão, casos abertos e eventos prevenidos ao lado (em baixo, na página `paineis.html` aberta sozinha); cada fonte mostra o seu logótipo, se houver um em `public/assets/icones-fontes/` (ver o `LEIA-ME.txt` dessa pasta), ou um círculo com a inicial. Thread própria, de 15 em 15 min, só com consultas
+cada número diz a sua definição (ao passar o rato). O visual segue o da consola: fontes de dados → Issues → Cases → Automated/Manual → Resolved/Open, com a faixa de ingestão, casos abertos e eventos prevenidos em baixo; cada fonte mostra o seu logótipo, se houver um em `public/assets/icones-fontes/` (ver o `LEIA-ME.txt` dessa pasta), ou um círculo com a inicial. Thread própria, de 15 em 15 min, só com consultas
 baratas (~0,02 de quota); os alertas vêm da recolha do painel principal.
 
 É a página `paineis.html` dentro de um `iframe`, em modo embutido

@@ -83,7 +83,8 @@
   <main class="grid">
     <!-- Command Center: a mesma página (paineis.html) em modo embutido, para
          o fluxo e a animação serem o mesmo código. Escolha do Miguel
-         (2026-10-01): no lugar do painel MITRE ATT&CK, que saiu. -->
+         (2026-10-01): à esquerda só o Command Center e o volume; os casos
+         passam para a direita, no lugar dos alertas mais críticos. -->
     <section class="panel p-cc">
       <iframe src="paineis.html?embed&amp;id=command-center" title="XSIAM Command Center: fluxo das últimas 24 horas" loading="eager"></iframe>
     </section>
@@ -107,7 +108,7 @@
       </div>
       <table class="tbl">
         <colgroup><col class="c-sev"><col class="c-case"><col><col><col><col><col class="c-age"><col class="c-state"></colgroup>
-        <thead><tr><th></th><th>Caso</th><th>Host</th><th>Utilizador</th><th>Deteção</th><th>Técnica MITRE</th><th class="num">Idade</th><th>Estado</th></tr></thead>
+        <thead><tr><th></th><th>Caso</th><th>Host</th><th>Utilizador</th><th>Deteção</th><th>MITRE</th><th class="num">Idade</th><th>Estado</th></tr></thead>
       </table>
       <div class="scroll-view" id="cases-view">
         <div class="scroll-track">
@@ -117,14 +118,6 @@
           </table>
         </div>
       </div>
-    </section>
-
-    <section class="panel p-top">
-      <div class="panel-head"><h2>Alertas mais críticos <span class="muted">· 24h</span></h2></div>
-      <table class="tbl">
-        <thead><tr><th class="c-sev"></th><th>ID</th><th>Alerta</th><th>Host / Utilizador</th><th>MITRE</th><th class="num">Idade</th></tr></thead>
-        <tbody id="top-body"><tr><td colspan="6" class="empty">A aguardar a primeira sincronização…</td></tr></tbody>
-      </table>
     </section>
 
     <section class="panel p-radar">
