@@ -1,0 +1,30 @@
+# Segredos: a chave do Cortex. Qualquer variante fica de fora; só o exemplo entra.
+.env
+.env.*
+!.env.example
+
+# Logs: têm IPs e nomes de sites.
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Node e o frontend construído (constrói-se com npm run build)
+node_modules/
+# O frontend construído (dist/) vai no git: o PC Windows não precisa de Node.
+# Depois de mudar src/, correr npm run build e versionar o dist/ novo.
+
+# Binário de terceiros que o instalador descarrega
+windows/nssm.exe
+
+# IDE / SO
+.vscode/
+.idea/
+.claude/
+*.swp
+.DS_Store
+Thumbs.db

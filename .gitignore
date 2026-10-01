@@ -22,3 +22,6 @@ windows/nssm.exe
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Mapa de ataques (mapa/): dependências do frontend
+node_modules/

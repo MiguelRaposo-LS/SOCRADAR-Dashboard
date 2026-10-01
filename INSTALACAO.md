@@ -31,6 +31,8 @@ secções 2, 3 e 4.2–4.3 deste manual:
 5. Fecha o `.env`, o `estado` e os `logs` ao SYSTEM e aos administradores.
 6. Descarrega o NSSM e instala o serviço com as definições da secção 3.
 7. Põe o browser em kiosk na pasta de arranque comum e tira o adormecer do ecrã.
+7b. Instala o mapa de ataques (`mapa\`, serviço `MapaAtaques`, porta 8001),
+   com as mesmas credenciais. `-SemMapa` salta este passo; ver `mapa\README.md`.
 8. Abre o `.env` no Bloco de Notas para pores as credenciais do Cortex e o
    `OLLAMA_URL`. Quando fechas, arranca o serviço e espera que responda.
 

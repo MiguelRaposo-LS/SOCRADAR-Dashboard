@@ -151,6 +151,14 @@ suportado». Cada widget gasta quota XQL a cada atualização (sobre `alerts`,
 cerca de 20× mais do que sobre `incidents`). O formato foi escrito a partir da
 documentação da API; confirmar com o primeiro export real.
 
+## Mapa de ataques (pasta `mapa/`)
+
+O botão «Mapa de ataques ›» no rodapé abre, num separador novo, um globo 3D
+com os pedidos que a Cloudflare bloqueou ou desafiou à frente dos sites do
+GRA, lidos do XSIAM. É uma aplicação à parte (FastAPI, porta 8001, serviço
+`MapaAtaques`), adaptada do `zethw0w/ddos-attack-map`, e o instalador do
+painel instala-a no fim. Tudo em [mapa/README.md](mapa/README.md).
+
 ## Briefing
 
 É gerado por um modelo local no Ollama (`OLLAMA_URL`, `OLLAMA_MODEL`, por

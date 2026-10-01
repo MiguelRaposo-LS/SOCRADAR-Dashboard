@@ -16,7 +16,9 @@ param(
     # O Ollama corre no Lubuntu, não neste PC: http://<IP do Lubuntu>:11434
     [string]$OllamaUrl = '',
     # Só o servidor: sem atalho de arranque do browser nem definições de energia.
-    [switch]$SemEcra
+    [switch]$SemEcra,
+    # Sem o mapa de ataques (pasta mapa\, serviço MapaAtaques).
+    [switch]$SemMapa
 )
 
 $ErrorActionPreference = 'Stop'
@@ -82,7 +84,7 @@ if ($OrigemReal -ne $DestinoReal) {
     # Fora: o que é desta máquina (.venv, estado, logs) e o .env, que nunca se
     # escreve por cima de um que já exista.
     & robocopy $OrigemReal $DestinoReal /E /NFL /NDL /NJH /NJS /NP `
-        /XD .venv estado logs __pycache__ .git .pytest_cache /XF .env | Out-Null
+        /XD .venv estado logs __pycache__ .git .pytest_cache node_modules /XF .env | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "A cópia falhou (robocopy $LASTEXITCODE)." }
     $envOrigem = Join-Path $OrigemReal '.env'
     if ((Test-Path $envOrigem) -and -not (Test-Path (Join-Path $DestinoReal '.env'))) {
@@ -276,4 +278,19 @@ Write-Host '   A recolha inicial demora ~6 min; o estado da API tem de chegar a 
 Write-Host "   Log: $log"
 if (-not $SemEcra) {
     Write-Host '   Falta à mão: início de sessão automático da TV (Autologon, INSTALACAO.md 4.1).'
+}
+
+# --- 9. O mapa de ataques -------------------------------------------------
+# Vive em mapa\ e tem o seu instalador. Uma falha dele não desfaz o painel,
+# que já está a correr: fica o aviso e o comando para o repetir.
+$mapa = Join-Path $Destino 'mapa\windows\instalar.ps1'
+if (-not $SemMapa -and (Test-Path $mapa)) {
+    Passo 'Mapa de ataques'
+    try {
+        & $mapa -Destino (Join-Path $Destino 'mapa') -Dashboard $Destino
+        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "saiu com $LASTEXITCODE" }
+    } catch {
+        Aviso "O mapa de ataques não ficou instalado: $($_.Exception.Message)"
+        Aviso "Para repetir só o mapa: $Destino\mapa\windows\instalar.cmd"
+    }
 }
