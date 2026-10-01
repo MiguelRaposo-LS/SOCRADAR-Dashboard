@@ -593,6 +593,8 @@ async function boot() {
 }
 
 wireLeve("btn-leve");
+// O mapa corre no mesmo PC, na porta 8001: o mesmo host desta página.
+try { $("btn-mapa").href = `${location.protocol}//${location.hostname}:8001/`; } catch { /* sem botão */ }
 scaleCharts();
 tick();
 setInterval(tick, 1000);
