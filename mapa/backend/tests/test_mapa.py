@@ -46,6 +46,14 @@ def test_linha_vira_ataque_com_destino_nos_acores():
     assert a["severity"] == "medium" and a["count"] == 3 and a["engines"] == ["firewallCustom"]
 
 
+def test_desafio_resolvido_nao_e_um_ataque_travado():
+    # Apareciam como Alto (T1190): quem resolve o desafio entra.
+    for acao in ("managedChallengeNonInteractiveSolved", "managedChallengeInteractiveSolved",
+                 "managedChallengeBypassed", "skip"):
+        assert fd.para_ataque(linha(SecurityAction=acao, SecuritySources='["firewallManaged"]')) is None
+    assert fd.para_ataque(linha(SecurityAction="managedChallenge"))["severity"] == "low"
+
+
 def test_sem_coordenadas_nao_se_inventa_um_sitio():
     # O projeto original punha estes num sítio aleatório.
     assert fd.para_ataque(linha(ClientLatitude=None)) is None

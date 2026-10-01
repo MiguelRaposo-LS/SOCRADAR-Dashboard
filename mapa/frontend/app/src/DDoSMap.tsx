@@ -54,8 +54,11 @@ interface Mensagem {
 }
 
 const WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/attacks`;
+// O painel (Azores Cyber 360) corre no mesmo PC, na porta 8360.
+const PAINEL_URL = `${location.protocol}//${location.hostname}:8360/`;
 const RECONNECT_DELAY = 5000;
 const MAX_LOG = 40;
+const LIVRE_MS = 30_000;   // sem mexer este tempo, o globo volta à animação
 const TZ = "Atlantic/Azores";
 // Locais, e não do unpkg: a TV não tem de chegar à Internet para ver o globo.
 const TEXTURA_TERRA = "texturas/terra.jpg";
@@ -120,6 +123,7 @@ export default function DDoSMap() {
   const arcsRef = useRef<THREE.Object3D[]>([]);
   const logRef = useRef<Ataque[]>([]);
   const sujoRef = useRef(false);
+  const interacaoRef = useRef(0);   // última vez que alguém mexeu no globo
 
   const [log, setLog] = useState<Ataque[]>([]);
   const [resumo, setResumo] = useState<Resumo | null>(null);
@@ -256,38 +260,76 @@ export default function DDoSMap() {
 
     sceneRef.current = { scene };
 
-    // A câmara fica nos Açores (theta 1,12 e phi 0,91 apontam para 37,7° N
-    // 25,7° O) e balança devagar ±0,6 rad. O original dava voltas completas, e
-    // o destino de todos os arcos passava metade do tempo atrás do globo.
+    // Animação: a câmara fica nos Açores (theta 1,12 e phi 0,95 apontam para
+    // 37,7° N 25,7° O) e balança devagar ±0,6 rad. O original dava voltas
+    // completas, e o destino dos arcos passava metade do tempo atrás do globo.
+    // Modo livre: arrastar roda, a roda do rato aproxima. Ao fim de LIVRE_MS
+    // sem mexer, volta sozinha à animação (pedido do Miguel, 2026-10-01).
     let dragging = false, prev = { x: 0, y: 0 };
-    const CENTRO = { theta: 1.122, phi: 0.95 };
+    const CENTRO = { theta: 1.122, phi: 0.95 }, DIST = 5.5;
     const sph = { ...CENTRO }, alvoSph = { ...CENTRO };
-    const dist = 5.5;
+    let dist = DIST, alvoDist = DIST, voltando = false;
     const update = () => {
       sph.phi = Math.max(0.3, Math.min(Math.PI - 0.3, sph.phi));
       camera.position.set(dist * Math.sin(sph.phi) * Math.sin(sph.theta), dist * Math.cos(sph.phi), dist * Math.sin(sph.phi) * Math.cos(sph.theta));
       camera.lookAt(0, 0, 0);
     };
     update();
-    const down = (e: MouseEvent) => { dragging = true; prev = { x: e.clientX, y: e.clientY }; };
-    const move = (e: MouseEvent) => {
-      if (!dragging) return;
-      alvoSph.theta -= (e.clientX - prev.x) * 0.005;
-      alvoSph.phi += (e.clientY - prev.y) * 0.005;
-      prev = { x: e.clientX, y: e.clientY };
+    const mexeu = () => { interacaoRef.current = Date.now(); voltando = false; };
+    const ponto = (e: MouseEvent | TouchEvent) => ("touches" in e ? e.touches[0] : e) as { clientX: number; clientY: number };
+    const down = (e: MouseEvent | TouchEvent) => {
+      const p = ponto(e);
+      if (!p) return;
+      dragging = true; prev = { x: p.clientX, y: p.clientY }; mexeu();
     };
-    const up = () => { dragging = false; };
-    renderer.domElement.addEventListener("mousedown", down);
-    renderer.domElement.addEventListener("mousemove", move);
+    const move = (e: MouseEvent | TouchEvent) => {
+      if (!dragging) return;
+      const p = ponto(e);
+      if (!p) return;
+      alvoSph.theta -= (p.clientX - prev.x) * 0.005;
+      alvoSph.phi = Math.max(0.3, Math.min(Math.PI - 0.3, alvoSph.phi + (p.clientY - prev.y) * 0.005));
+      prev = { x: p.clientX, y: p.clientY };
+      mexeu();
+      if ("touches" in e) e.preventDefault();
+    };
+    const up = () => { if (dragging) mexeu(); dragging = false; };
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      alvoDist = Math.max(3, Math.min(12, alvoDist + e.deltaY * 0.004));
+      mexeu();
+    };
+    const el = renderer.domElement;
+    el.style.cursor = "grab";
+    el.addEventListener("mousedown", down);
+    el.addEventListener("mousemove", move);
+    el.addEventListener("wheel", wheel, { passive: false });
+    el.addEventListener("touchstart", down, { passive: true });
+    el.addEventListener("touchmove", move, { passive: false });
     window.addEventListener("mouseup", up);
+    window.addEventListener("touchend", up);
 
     let aId = 0;
     const animate = () => {
       aId = requestAnimationFrame(animate);
       const now = Date.now();
-      if (!dragging) alvoSph.theta = CENTRO.theta + 0.6 * Math.sin(now / 40_000);
-      sph.theta += (alvoSph.theta - sph.theta) * 0.08;
-      sph.phi += (alvoSph.phi - sph.phi) * 0.08;
+      const livre = dragging || now - interacaoRef.current < LIVRE_MS;
+      if (!livre) {
+        if (!voltando) {
+          // Volta pelo caminho mais curto: depois de várias voltas ao globo,
+          // ir direto ao ângulo de origem desenrolava-as todas.
+          const tau = 2 * Math.PI;
+          sph.theta = CENTRO.theta + ((((sph.theta - CENTRO.theta) % tau) + tau + Math.PI) % tau) - Math.PI;
+          voltando = true;
+        }
+        alvoSph.theta = CENTRO.theta + 0.6 * Math.sin(now / 40_000);
+        alvoSph.phi = CENTRO.phi;
+        alvoDist = DIST;
+      }
+      // Ao arrastar, segue a mão; ao voltar, devagar (~3 s), para se ver a volta.
+      const k = livre ? 0.08 : 0.02;
+      sph.theta += (alvoSph.theta - sph.theta) * k;
+      sph.phi += (alvoSph.phi - sph.phi) * k;
+      dist += (alvoDist - dist) * k;
       update();
       const t = (now % 2000) / 2000;
       anel.scale.set(1 + t * 2.5, 1 + t * 2.5, 1);
@@ -325,6 +367,7 @@ export default function DDoSMap() {
       cancelAnimationFrame(aId);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("mouseup", up);
+      window.removeEventListener("touchend", up);
       renderer.dispose();
       if (c.contains(renderer.domElement)) c.removeChild(renderer.domElement);
     };
@@ -350,10 +393,16 @@ export default function DDoSMap() {
       <div ref={mountRef} style={st.globe} />
 
       <div style={{ ...st.topBar, ...z }}>
+        {/* Na TV (kiosk) não há barra do browser nem separadores: sem este
+            botão, quem abria o mapa não tinha como voltar ao painel. */}
+        <a href={PAINEL_URL} style={st.voltar}>← Painel principal</a>
         <div style={st.logo}><span style={st.logoDot} />MAPA DE ATAQUES · Azores Cyber 360</div>
         <div style={st.statusBadge} title={servidor?.erro ?? ""}>
           <span style={{ ...st.statusDot, background: estado.cor }} />{estado.txt}
         </div>
+        {agora - interacaoRef.current < LIVRE_MS && (
+          <div style={st.livre}>Modo livre · volta à animação em {Math.ceil((LIVRE_MS - (agora - interacaoRef.current)) / 1000)} s</div>
+        )}
         <div style={st.relogio}>{hora(agora)} <span style={st.tz}>Açores</span></div>
       </div>
 
@@ -464,10 +513,12 @@ const st: Record<string, React.CSSProperties> = {
   globe: { position: "absolute", inset: 0, zIndex: 1 },
 
   topBar: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, display: "flex", alignItems: "center", gap: "16px", padding: "12px 20px", ...glass, borderRadius: 0, borderTop: "none", borderLeft: "none", borderRight: "none" },
+  voltar: { color: "#e0e6ed", textDecoration: "none", fontSize: "13px", fontWeight: 600, padding: "5px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", whiteSpace: "nowrap" },
   logo: { display: "flex", alignItems: "center", gap: "8px", fontSize: "15px", fontWeight: 700, letterSpacing: "1px", color: "#4fc3f7" },
   logoDot: { width: "8px", height: "8px", borderRadius: "50%", background: "#4fc3f7", boxShadow: "0 0 8px #4fc3f7" },
   statusBadge: { display: "flex", alignItems: "center", gap: "6px", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 600, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" },
   statusDot: { width: "8px", height: "8px", borderRadius: "50%" },
+  livre: { fontSize: "12px", fontWeight: 600, color: "#4fc3f7", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(79,195,247,0.4)", background: "rgba(79,195,247,0.08)" },
   relogio: { marginLeft: "auto", fontSize: "18px", fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   tz: { fontSize: "11px", fontWeight: 500, color: "#8899aa" },
 

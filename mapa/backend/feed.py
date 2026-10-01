@@ -31,11 +31,15 @@ RECUPERAR_MAX_MS = 10 * 60_000
 # diz onde fica a origem, e um ponto fixo nos Açores é o que o ecrã quer dizer.
 ACORES = {"latitude": 37.7412, "longitude": -25.6756, "country": "PT", "country_code": "PT"}
 
-# «skip», «log» e «allow» deixaram passar; «managedChallengeBypassed» é quem
-# passou o desafio — também entrou. Nenhum é um ataque travado.
+# «skip», «log» e «allow» deixaram passar; «…Solved» e «…Bypassed»
+# (managedChallengeNonInteractiveSolved, managedChallengeBypassed…) são quem
+# resolveu ou saltou o desafio — também entrou. Nenhum é um ataque travado.
+# (A 2026-10-01 os «Solved» apareciam como Alto, com T1190: estavam a ser
+# contados como bloqueios do WAF.)
 QUERY = """dataset = cloudflare_waf_raw
 | filter SecurityAction != null and SecurityAction != ""
-    and SecurityAction not in ("skip", "log", "allow", "managedChallengeBypassed")
+    and SecurityAction not in ("skip", "log", "allow")
+    and SecurityAction !~= "(?i)(solved|bypassed)"
 | comp count() as n, min(_time) as t by ClientIP, ClientCountry, ClientCity, ClientLatitude,
     ClientLongitude, SecurityAction, SecuritySources, SecurityRuleDescription, ClientRequestHost"""
 
@@ -83,6 +87,9 @@ def para_ataque(r: dict) -> dict | None:
     """Uma linha do XQL → um ataque no formato que o frontend desenha.
     Sem coordenadas não se desenha: inventar um sítio era o que o projeto
     original fazia, e um ataque real num sítio falso engana quem olha."""
+    acao = str(r.get("SecurityAction") or "").lower()
+    if not acao or acao in ("skip", "log", "allow") or "solved" in acao or "bypassed" in acao:
+        return None   # entrou: não é um ataque travado (a consulta já os tira)
     lat, lng = _num(r.get("ClientLatitude")), _num(r.get("ClientLongitude"))
     if lat is None or lng is None:
         return None
