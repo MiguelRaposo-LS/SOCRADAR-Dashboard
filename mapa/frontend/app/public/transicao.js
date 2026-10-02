@@ -6,8 +6,9 @@
    um serve a sua); tests/test_dashboard.py confere que são iguais. Mudar nos
    dois.
 
-   Quem sai chama TransicaoAcores.sair(url, destino): o ecrã escurece, a
-   bandeira aparece e ondula, e só depois a página muda, com «#bandeira» no
+   Quem sai chama TransicaoAcores.sair(url): o ecrã escurece, a bandeira
+   aparece e ondula, com o logótipo «Governo dos Açores» por baixo, e só
+   depois a página muda, com «#bandeira» no
    endereço. Quem entra vê esse «#bandeira», abre com a bandeira já no ecrã e
    desvanece-a. No modo leve (html.leve) muda logo, sem animação.
 
@@ -17,6 +18,9 @@
   "use strict";
   const script = document.currentScript;
   const BANDEIRA = (script && script.dataset.bandeira) || "bandeira-acores.svg";
+  // Por baixo da bandeira, o logótipo «Governo dos Açores» (entregue pelo
+  // Miguel, Fotos/governo-dos-acores-vector-logo.png, recortado à margem).
+  const LOGO = (script && script.dataset.logo) || "governo-acores.png";
   const MARCA = "#bandeira";
   const FAIXAS = 28;
   const SAIR_MS = 1300;      // da bandeira a aparecer até a página mudar
@@ -39,8 +43,11 @@
   0%, 100% { transform: translateY(-1.6%); filter: brightness(1.04); }
   50% { transform: translateY(1.6%); filter: brightness(.88); }
 }
-.trans-bandeira .tb-texto { font: 600 clamp(14px, 1.6vh, 40px) system-ui, "Segoe UI", sans-serif;
-  color: #c9d4e3; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.trans-bandeira .tb-logo { background: #fff; border-radius: .9vh; padding: 1.1vh 1.6vh;
+  box-shadow: 0 .8vh 2vh rgba(0, 0, 0, .45);
+  transform: translateY(1.5vh); opacity: 0; transition: transform .7s .15s cubic-bezier(.2, .8, .2, 1), opacity .5s .15s ease-out; }
+.trans-bandeira.visivel .tb-logo { transform: none; opacity: 1; }
+.trans-bandeira .tb-logo img { display: block; height: 7vh; width: auto; }
 `;
 
   function estilo() {
@@ -51,7 +58,7 @@
     document.head.appendChild(st);
   }
 
-  function montar(texto) {
+  function montar() {
     estilo();
     const ov = document.createElement("div");
     ov.className = "trans-bandeira";
@@ -67,12 +74,15 @@
       flag.appendChild(f);
     }
     ov.appendChild(flag);
-    // O texto ocupa sempre o seu lugar, mesmo vazio (na página que entra):
-    // sem ele a bandeira ficava mais abaixo e dava um salto na passagem.
-    const t = document.createElement("div");
-    t.className = "tb-texto";
-    t.textContent = texto || "\u00a0";
-    ov.appendChild(t);
+    // O logótipo aparece dos dois lados (na página que sai e na que entra):
+    // assim a bandeira fica no mesmo sítio e não dá um salto na passagem.
+    const logo = document.createElement("div");
+    logo.className = "tb-logo";
+    const img = document.createElement("img");
+    img.src = LOGO;
+    img.alt = "Governo dos Açores";
+    logo.appendChild(img);
+    ov.appendChild(logo);
     document.body.appendChild(ov);
     return ov;
   }
@@ -82,7 +92,7 @@
   function sair(url, destino) {
     const alvo = url.split("#")[0] + MARCA;
     if (leve()) { location.href = url; return; }
-    const ov = montar(destino);
+    const ov = montar();
     void ov.offsetWidth;            // aplica o estado inicial antes de animar
     ov.classList.add("visivel");
     setTimeout(() => { location.href = alvo; }, SAIR_MS);
@@ -93,7 +103,7 @@
     // Tira o «#bandeira» do endereço: um F5 depois não repete a animação.
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* sem history */ }
     if (leve()) return;
-    const ov = montar("");
+    const ov = montar();
     ov.style.transition = "none";
     ov.classList.add("visivel");
     setTimeout(() => {
