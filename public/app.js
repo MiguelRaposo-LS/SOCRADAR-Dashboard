@@ -775,7 +775,7 @@ async function boot() {
 // com Ctrl/Shift ou no modo leve, sai logo.
 const MAPA_URL = `${location.protocol}//${location.hostname}:8001/`;
 function irParaMapa() {
-  // A bandeira dos Açores a ondular (transicao.js); sem ela, o escurecer simples.
+  // O logótipo «Governo dos Açores» a surgir (transicao.js); sem ele, o escurecer simples.
   if (window.TransicaoAcores) { TransicaoAcores.sair(MAPA_URL, "Mapa de ataques"); return; }
   if (LEVE) { location.href = MAPA_URL; return; }
   document.documentElement.classList.add("saindo");
@@ -829,12 +829,15 @@ document.querySelectorAll(".p-cc iframe").forEach((f) => {
 // Contagem discreta no rodapé: diz quando passa para o mapa — e, se nunca
 // avançar, que alguma coisa está a contar como «mexer» (foi assim que se
 // deu pelos mousemove falsos, 2026-10-02).
+// Escondida por omissão (o Miguel não a quer à vista, 2026-10-02): a
+// alternância corre na mesma por trás. ?contagem=1 mostra-a, para diagnóstico.
+const VER_CONTAGEM = new URLSearchParams(location.search).get("contagem") === "1";
 let mapaSemResposta = false;
 function mostrarContagem() {
   const el = $("rodar-info");
   if (!el) return;
-  el.hidden = !RODAR;
-  if (!RODAR) return;
+  el.hidden = !(RODAR && VER_CONTAGEM);
+  if (el.hidden) return;
   const falta = Math.max(0, PAINEL_MS - (Date.now() - ultimaAtividade));
   const ha = Math.round((Date.now() - ultimaAtividade) / 1000);
   // A causa só enquanto é recente: se a contagem não desce, diz porquê.

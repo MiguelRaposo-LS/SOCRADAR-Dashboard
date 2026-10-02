@@ -861,6 +861,5 @@ def test_transicao_igual_no_painel_e_no_mapa():
     # O painel e o mapa servem cada um a sua cópia (portas diferentes); têm de
     # ser iguais, senão a transição de ida e a de volta divergem.
     raiz = Path(__file__).resolve().parent.parent
-    for nome, mapa in (("transicao.js", "transicao.js"), ("assets/bandeira-acores.svg", "bandeira-acores.svg"),
-                       ("assets/governo-acores.png", "governo-acores.png")):
+    for nome, mapa in (("transicao.js", "transicao.js"), ("assets/governo-acores.png", "governo-acores.png")):
         assert (raiz / "public" / nome).read_bytes() == (raiz / "mapa/frontend/app/public" / mapa).read_bytes()

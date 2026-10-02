@@ -138,8 +138,8 @@ function useEscala(): number {
 // O painel está noutra porta (outro site, para o browser): a transição nativa
 // entre páginas não serve. Escurece-se esta antes de sair (index.css) e o
 // painel aparece do escuro. Com Ctrl/Shift sai logo.
-// A bandeira dos Açores a ondular (public/transicao.js, carregado no
-// index.html); sem ela, o escurecer simples.
+// O logótipo «Governo dos Açores» a surgir (public/transicao.js, carregado
+// no index.html); sem ele, o escurecer simples.
 declare global { interface Window { TransicaoAcores?: { sair: (url: string, destino: string) => void } } }
 function irParaPainel() {
   if (window.TransicaoAcores) { window.TransicaoAcores.sair(PAINEL_URL, "Painel principal"); return; }
@@ -157,6 +157,7 @@ function voltar(e: React.MouseEvent<HTMLAnchorElement>) {
 // Mexer (rato, teclado, toque, rodar o globo) recomeça a contagem. ?rodar=0
 // desliga neste browser (fica guardado), ?rodar=1 volta a ligar.
 const MAPA_MS = 2 * 60_000;
+const VER_CONTAGEM = new URLSearchParams(location.search).get("contagem") === "1";
 const RODAR = (() => {
   const q = new URLSearchParams(location.search);
   try {
@@ -527,7 +528,8 @@ export default function DDoSMap() {
           <div style={st.livre}>Modo livre · volta à animação em {Math.ceil((LIVRE_MS - (agora - interacaoRef.current)) / 1000)} s</div>
         )}
         <div style={{ marginLeft: "auto" }} />
-        {voltaEm !== null && (
+        {/* Escondida por omissão; ?contagem=1 mostra-a (diagnóstico). */}
+        {voltaEm !== null && VER_CONTAGEM && (
           <div style={st.voltaEm}>painel em {Math.floor(voltaEm / 60_000)}:{String(Math.floor(voltaEm / 1000) % 60).padStart(2, "0")}</div>
         )}
         <div style={st.relogio}>{hora(agora)} <span style={st.tz}>Açores</span></div>
