@@ -27,6 +27,7 @@ from cortex_client import CortexError
 log = logging.getLogger(__name__)
 
 REFRESH_S = 15 * 60
+RETRY_S = 60
 # Logótipos das fontes de dados: ficheiros oficiais postos à mão nesta pasta,
 # com o nome «<fornecedor>-<produto>.svg|png» em minúsculas (ex.:
 # panw-ngfw.svg). Sem ficheiro, a página mostra um círculo com a inicial.
@@ -130,7 +131,8 @@ class CommandCenter:
         self.at: int | None = None
         self.error: str | None = None
 
-    def refresh(self) -> None:
+    def refresh(self) -> bool:
+        """Atualiza os blocos; devolve False se o XSIAM falhou."""
         now = int(time.time() * 1000)
         try:
             ing = self.source.ingestion(now - agg.DAY, now)
@@ -152,14 +154,15 @@ class CommandCenter:
             log.warning("Command Center: o XSIAM falhou (%s): %s", exc.kind, exc)
             with self.lock:
                 self.error = str(exc)
-            return
+            return False
         except Exception as exc:  # noqa: BLE001 — esta página nunca derruba o painel
             log.exception("Command Center: erro inesperado")
             with self.lock:
                 self.error = type(exc).__name__
-            return
+            return False
         with self.lock:
             self.data, self.at, self.error = data, now, None
+        return True
 
     def _sources(self, now: int) -> dict:
         allsrc = self.source.data_sources(now - agg.DAY)
@@ -185,5 +188,8 @@ class CommandCenter:
         while self.store.stages != []:
             time.sleep(5)
         while True:
-            self.refresh()
-            time.sleep(REFRESH_S)
+            # Depois de uma falha, outra vez daqui a 1 min, e não 15: o XSIAM
+            # devolveu uma vez metade das linhas de uma consulta («13 de 26»,
+            # 2026-10-02) e, logo a seguir a um arranque, a página ficava com
+            # o erro até à atualização seguinte.
+            time.sleep(REFRESH_S if self.refresh() else RETRY_S)

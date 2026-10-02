@@ -793,19 +793,25 @@ const RODAR = (() => {
   } catch { return q.get("rodar") !== "0"; }
 })();
 let ultimaAtividade = Date.now();
-const ATIVIDADE = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"];
+// O que recomeçou a contagem, para aparecer ao lado dela: no PC da TV a
+// contagem não descia e daqui não se via porquê (2026-10-02).
+let ultimaCausa = null;
+const PAGINA_ABERTA = Date.now();
+const ATIVIDADE = { mousemove: "rato mexeu", mousedown: "clique", keydown: "tecla",
+                    wheel: "roda do rato", touchstart: "toque" };
 // «mousemove» só conta se o rato mudou mesmo de posição (moveuMesmo, acima).
-const ouvirAtividade = (w) => ATIVIDADE.forEach((ev) =>
+const ouvirAtividade = (w, onde) => Object.keys(ATIVIDADE).forEach((ev) =>
   w.addEventListener(ev, (e) => {
     if (ev === "mousemove" && !moveuMesmo(e)) return;
     ultimaAtividade = Date.now();
+    ultimaCausa = ATIVIDADE[ev] + (ev === "keydown" && e.key ? ` (${e.key})` : "") + onde;
   }, { passive: true }));
-ouvirAtividade(window);
+ouvirAtividade(window, "");
 // O Command Center é um iframe: os eventos de lá não chegam a esta janela, e
 // mexer o rato em cima dele não contava (visto no teste, 2026-10-02). É do
 // mesmo site, por isso ouve-se lá dentro também, a cada vez que carrega.
 document.querySelectorAll(".p-cc iframe").forEach((f) => {
-  const ligar = () => { try { ouvirAtividade(f.contentWindow); } catch { /* outro site */ } };
+  const ligar = () => { try { ouvirAtividade(f.contentWindow, " no Command Center"); } catch { /* outro site */ } };
   f.addEventListener("load", ligar);
   if (f.contentDocument?.readyState === "complete") ligar();
 });
@@ -819,7 +825,12 @@ function mostrarContagem() {
   el.hidden = !RODAR;
   if (!RODAR) return;
   const falta = Math.max(0, PAINEL_MS - (Date.now() - ultimaAtividade));
-  el.textContent = mapaSemResposta ? "mapa sem resposta" : falta < 60_000 ? "mapa em <1 min" : `mapa em ${Math.ceil(falta / 60_000)} min`;
+  const ha = Math.round((Date.now() - ultimaAtividade) / 1000);
+  // A causa só enquanto é recente: se a contagem não desce, diz porquê.
+  const causa = ultimaCausa && ha < 60 ? ` · ${ultimaCausa} há ${ha} s` : "";
+  el.textContent = (mapaSemResposta ? "mapa sem resposta" : falta < 60_000 ? "mapa em <1 min" : `mapa em ${Math.ceil(falta / 60_000)} min`) + causa;
+  // Ao passar o rato: quando abriu a página (para se ver se está a recarregar).
+  el.title = `Página aberta às ${new Date(PAGINA_ABERTA).toLocaleTimeString("pt-PT", { timeZone: TZ })}`;
 }
 if (RODAR) {
   setInterval(() => {

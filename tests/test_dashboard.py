@@ -815,7 +815,8 @@ def test_falha_do_command_center_nao_afeta_o_painel(client):
     def boom(*a, **k):
         raise CortexError("http", "XSIAM respondeu 500")
     cc.source = type("S", (), {"ingestion": boom})()
-    cc.refresh()
+    # False: o ciclo volta a tentar daqui a 1 min (RETRY_S), e não 15.
+    assert cc.refresh() is False
     assert "500" in client.get("/api/command-center", headers=auth()).json["error"]
     s = client.get("/api/summary", headers=auth())
     assert s.status_code == 200 and s.json["status"]["state"] in ("operacional", "degradado")
