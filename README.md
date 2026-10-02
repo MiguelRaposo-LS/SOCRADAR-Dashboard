@@ -113,7 +113,7 @@ paginação segue até vir uma página incompleta, com um teto
 | Auto contido | Casos resolvidos nas últimas 24h com um estado `resolved_*auto*` (XQL) |
 | Ameaças bloqueadas | Alertas das últimas 24h com categoria de malware, spyware, vírus ou WildFire e ação *Blocked*/*Prevented*. Inclui o Anti-Spyware da NGFW |
 | MTTR | **Mean Time To Resolve**: da criação à resolução, só casos resolvidos nas últimas 24h, sem os automáticos nem os duplicados (XQL). Acima de 120 min aparece em horas |
-| Volume | Casos por data de criação, no fuso dos Açores, uma linha por severidade. «Médio» abre escondido (é 97–99% dos casos e esmagava as outras linhas); um clique na legenda mostra-o, e o tooltip dá sempre o total com todas as severidades |
+| Volume | Casos por data de criação, no fuso dos Açores, uma linha por severidade, em **escala logarítmica** (0, 10, 100, 1 000…): o «Médio» é 96–99% dos casos e, numa escala linear, esmagava as outras. «Volume» mostra os casos; «% do total», a parte de cada severidade em cada período (soma 100%). Um 0 desenha-se no fundo do eixo. A dica dá, por severidade, os casos e a percentagem, e o total. O período de hoje (ou a hora atual, em 24h) vai a tracejado, com o ponto vazio |
 | Alertas mais críticos | Alertas das últimas 24h, os mais graves e recentes primeiro. O mesmo alerta no mesmo host junta-se numa linha, com «×N» |
 | Radar (Gravidade das Ameaças) | Casos, pelas táticas MITRE que o XSIAM lhes atribui. Um caso com duas táticas conta nas duas |
 | Estado da API | Verde: última sincronização correu bem há menos de 10 min. Amarelo: falhou, ou está parada há mais de 10 min. Vermelho: falha e mais de 10 min sem dados, ou o servidor não responde |
@@ -158,6 +158,12 @@ com os pedidos que a Cloudflare bloqueou ou desafiou à frente dos sites do
 GRA, lidos do XSIAM. É uma aplicação à parte (FastAPI, porta 8001, serviço
 `MapaAtaques`), adaptada do `zethw0w/ddos-attack-map`, e o instalador do
 painel instala-a no fim. Tudo em [mapa/README.md](mapa/README.md).
+
+**Alternância na TV:** 5 min sem ninguém mexer no painel e passa para o mapa;
+o mapa volta ao painel ao fim de 2 min. Mexer (rato, teclado, toque, também
+em cima do Command Center ou a rodar o globo) recomeça a contagem. Só muda se
+o outro lado responder: com o mapa em baixo, o painel fica. `?rodar=0` no
+endereço desliga a alternância nesse browser (fica guardado; `?rodar=1` liga).
 
 ## Briefing
 

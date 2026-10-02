@@ -138,12 +138,28 @@ function useEscala(): number {
 // O painel está noutra porta (outro site, para o browser): a transição nativa
 // entre páginas não serve. Escurece-se esta antes de sair (index.css) e o
 // painel aparece do escuro. Com Ctrl/Shift sai logo.
-function voltar(e: React.MouseEvent<HTMLAnchorElement>) {
-  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
-  e.preventDefault();
+function irParaPainel() {
   document.documentElement.classList.add("saindo");
   setTimeout(() => { location.href = PAINEL_URL; }, 350);
 }
+function voltar(e: React.MouseEvent<HTMLAnchorElement>) {
+  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  irParaPainel();
+}
+
+// Alternância na TV (pedido do Miguel, 2026-10-02): o painel passa para o mapa
+// ao fim de 5 min sem ninguém mexer, e o mapa volta ao painel ao fim de 2.
+// Mexer (rato, teclado, toque, rodar o globo) recomeça a contagem. ?rodar=0
+// desliga neste browser (fica guardado), ?rodar=1 volta a ligar.
+const MAPA_MS = 2 * 60_000;
+const RODAR = (() => {
+  const q = new URLSearchParams(location.search);
+  try {
+    if (q.has("rodar")) localStorage.setItem("mapa:rodar", q.get("rodar") === "0" ? "0" : "1");
+    return localStorage.getItem("mapa:rodar") !== "0";
+  } catch { return q.get("rodar") !== "0"; }
+})();
 // «Retroceder» do browser pode trazer a página da cache ainda escurecida.
 window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));
 
@@ -192,6 +208,25 @@ export default function DDoSMap() {
     if (logRef.current.length > MAX_LOG) logRef.current.length = MAX_LOG;
     sujoRef.current = true;
   }, [desenhar]);
+
+  useEffect(() => {
+    if (!RODAR) return;
+    let ultima = Date.now();
+    const mexeu = () => { ultima = Date.now(); };
+    const evs = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"] as const;
+    evs.forEach((ev) => window.addEventListener(ev, mexeu, { passive: true }));
+    const id = setInterval(() => {
+      const parado = Date.now() - Math.max(ultima, interacaoRef.current);
+      if (parado < MAPA_MS) return;
+      ultima = Date.now();   // não tenta outra vez a cada 5 s se falhar
+      // Só sai se o painel responder: com o painel em baixo, a TV ia parar a
+      // uma página de erro. no-cors: basta saber que respondeu.
+      fetch(`${PAINEL_URL}api/ping`, { mode: "no-cors", cache: "no-store" })
+        .then(irParaPainel)
+        .catch(() => console.warn("Painel sem resposta: fica o mapa."));
+    }, 5000);
+    return () => { clearInterval(id); evs.forEach((ev) => window.removeEventListener(ev, mexeu)); };
+  }, []);
 
   // ~13 ataques por segundo: o React só redesenha a lista 2×/s, e não a
   // cada ataque (era o que o original fazia).

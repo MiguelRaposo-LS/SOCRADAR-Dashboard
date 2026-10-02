@@ -216,6 +216,10 @@ h1, h2 { margin: 0; font-weight: 600; }
 .panel-head { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.4rem; flex: none; }
 .panel-head h2 { font-size: 1.05rem; margin-right: auto; }
 .chart-box { position: relative; flex: 1; min-height: 0; }
+/* Volume: diz que o eixo Y é logarítmico, onde se vê logo (ver app.js). */
+.escala-log { font-size: .75rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 0.267rem;
+  padding: 0.067rem 0.4rem; white-space: nowrap; margin-right: auto; }
+.p-volume .panel-head h2 { margin-right: 0; }   /* a etiqueta fica colada ao título */
 .note { font-size: .8rem; color: var(--ink-2); border: 1px dashed var(--sev-medium); border-radius: 0.267rem; padding: 0.067rem 0.4rem; }
 .warn {
   font-size: .75rem; color: var(--degraded); border: 1px solid currentColor;

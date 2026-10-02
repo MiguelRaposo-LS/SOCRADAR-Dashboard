@@ -214,37 +214,99 @@ function applyStatus(st) {
 
 let volumeChart = null;
 let volumeRange = "7d";
+let volumeDados = null;          // a última resposta de /api/incidents
+// «Volume» (casos) ou «% do total» (de cada dia). O browser guarda a escolha.
+let volumeModo = (() => { try { return localStorage.getItem("ac360:volume-modo") === "pct" ? "pct" : "volume"; } catch { return "volume"; } })();
 
 const gridColor = v("--grid");
 const inkColor = v("--ink-2");
 
+// Escala logarítmica nos dois modos (decidido a 2026-10-02, depois de duas
+// tentativas postas de lado): as severidades vivem em ordens de grandeza
+// diferentes — Médio nos milhares (96–99% dos casos), Alto nas centenas,
+// Baixo nas dezenas, Crítico nas unidades — e o log põe cada uma na sua
+// faixa. Na escala linear o Médio esmagava as outras junto ao zero, e em
+// percentagem acontecia o mesmo (o Médio a ~97%, as outras entre 0 e 3%).
+// O log não tem zero: um 0 desenha-se no fundo do eixo (ZERO_LOG.*), com a
+// etiqueta «0», e a dica dá sempre o número exato.
+const ZERO_LOG = { volume: 0.7, pct: 0.07 };
+const pctDe = (n, total) => (total ? (n / total) * 100 : 0);
+const pctTxt = (x) => `${x.toLocaleString("pt-PT", { maximumFractionDigits: x < 10 ? 1 : 0 })}%`;
+// 1 000 · 10 mil · 100 mil · 1 M: o eixo lê-se de longe, sem números compridos.
+function curto(n) {
+  if (n >= 1e6) return `${(n / 1e6).toLocaleString("pt-PT", { maximumFractionDigits: 1 })} M`;
+  if (n >= 1e4) return `${(n / 1e3).toLocaleString("pt-PT", { maximumFractionDigits: 0 })} mil`;
+  return nf(n);
+}
+// Só potências de 10 (e «0» no fundo): a meio de cada década o Chart.js punha
+// 2, 3, 5… e as etiquetas sobrepunham-se. O «1» (ou 0,1%) também sai: fica
+// quase à altura do «0».
+function etiquetaY(val) {
+  const zero = ZERO_LOG[volumeModo];
+  if (val <= zero) return "0";
+  const e = Math.log10(val);
+  if (Math.abs(e - Math.round(e)) > 1e-9) return null;
+  if (volumeModo === "pct") return e >= 0 ? `${val}%` : null;     // 1%, 10%, 100%
+  return e >= 1 ? curto(val) : null;                                // 10, 100, 1 000, 10 mil…
+}
+
+function volumeDatasets(d) {
+  const surface = v("--surface");
+  const totais = d.buckets.map((b) => SEV_ORDER.reduce((a, s) => a + b[s], 0));
+  const zero = ZERO_LOG[volumeModo];
+  return SEV_ORDER.map((s) => {
+    const reais = d.buckets.map((b) => b[s]);
+    const pcts = reais.map((n, k) => pctDe(n, totais[k]));
+    const valores = volumeModo === "pct" ? pcts : reais;
+    return {
+      label: SEV[s].label,
+      data: valores.map((x) => Math.max(x, zero)),
+      reais, pcts, totais,
+      borderColor: SEV[s].color,
+      backgroundColor: SEV[s].color,
+      borderWidth: Math.max(2, Math.round(rem() * 0.15)),
+      tension: 0.2,
+      fill: false,
+      pointRadius: d.buckets.map((b) => (b.partial ? rem() * 0.35 : d.buckets.length > 31 ? 0 : rem() * 0.2)),
+      pointHoverRadius: rem() * 0.4,
+      // O período de hoje ainda está a decorrer: ponto vazio e último troço a
+      // tracejado e mais ténue, para a descida não se ler como uma quebra.
+      pointBackgroundColor: d.buckets.map((b) => (b.partial ? surface : SEV[s].color)),
+      pointBorderColor: SEV[s].color,
+      pointBorderWidth: 2,
+      segment: {
+        borderDash: (ctx) => (ctx.p1DataIndex === volumePartial ? [6, 5] : undefined),
+        borderColor: (ctx) => (ctx.p1DataIndex === volumePartial ? SEV[s].color + "99" : undefined),
+      },
+    };
+  });
+}
+
+function volumeEixoY() {
+  return {
+    type: "logarithmic", min: ZERO_LOG[volumeModo], max: volumeModo === "pct" ? 100 : undefined,
+    grid: { color: gridColor }, border: { display: false },
+    // Título curto: na vertical, «Volume de incidentes · escala logarítmica»
+    // não cabia na altura do painel e saía cortado. A escala diz-se na
+    // etiqueta «Escala logarítmica» do cabeçalho (index.html).
+    title: { display: true, color: inkColor, text: volumeModo === "pct" ? "% do total" : "Incidentes" },
+    ticks: { color: inkColor, autoSkip: true, callback: etiquetaY },
+  };
+}
+
 async function loadVolume() {
   const d = await api(`/api/incidents?range=${volumeRange}`);
+  volumeDados = d;
   warn("volume-warn", d);
+  drawVolume();
+}
+
+function drawVolume() {
+  const d = volumeDados;
+  if (!d) return;
   const labels = d.buckets.map((b) => b.label);
-  // Hoje (ou «agora», em 24h) ainda está a decorrer: o último troço vai a
-  // tracejado e o último ponto vazio, para a descida não parecer uma quebra.
   volumePartial = d.buckets.findIndex((b) => b.partial);
-  const surface = v("--surface");
-  const datasets = SEV_ORDER.map((s) => ({
-    label: SEV[s].label,
-    data: d.buckets.map((b) => b[s]),
-    borderColor: SEV[s].color,
-    backgroundColor: SEV[s].color,
-    borderWidth: 2,
-    tension: 0.2,
-    fill: false,
-    pointRadius: d.buckets.map((b) => (b.partial ? rem() * 0.35 : d.buckets.length > 31 ? 0 : rem() * 0.2)),
-    pointHoverRadius: rem() * 0.4,
-    pointBackgroundColor: d.buckets.map((b) => (b.partial ? surface : SEV[s].color)),
-    pointBorderColor: SEV[s].color,
-    pointBorderWidth: 2,
-    segment: { borderDash: (ctx) => (ctx.p1DataIndex === volumePartial ? [6, 5] : undefined) },
-    // «Médio» começa escondido: no GRA é 97–99% dos casos (NGFW resolvido
-    // automaticamente) e deixava as outras séries esmagadas junto ao zero.
-    // Decidido pelo Miguel a 2026-09-30.
-    hidden: s === "medium",
-  }));
+  const datasets = volumeDatasets(d);
   volumeMediumTotal = d.buckets.reduce((a, b) => a + b.medium, 0);
   if (!volumeChart) {
     volumeChart = new Chart($("volume-chart"), {
@@ -255,32 +317,48 @@ async function loadVolume() {
         interaction: { mode: "index", intersect: false },
         scales: {
           x: { grid: { display: false }, ticks: { color: inkColor, autoSkip: true, maxRotation: 0 } },
-          y: { beginAtZero: true, grid: { color: gridColor }, border: { display: false },
-               ticks: { color: inkColor, precision: 0 } },
+          y: volumeEixoY(),
         },
         plugins: {
-          legend: { position: "top", align: "end", reverse: true,
+          // Por severidade, do mais grave para o menos (Crítico → Baixo).
+          legend: { position: "top", align: "end",
                     onClick: (e, item, legend) => {
                       Chart.defaults.plugins.legend.onClick.call(legend, e, item, legend);
                       renderVolumeNote();
                     },
-                    labels: { color: inkColor, boxWidth: Math.round(rem() * 0.7), boxHeight: Math.round(rem() * 0.7), usePointStyle: true, pointStyle: "rectRounded" } },
-          tooltip: { reverse: true, callbacks: {
-            // O total conta as quatro severidades, mesmo as escondidas: um
-            // total sem os «Médio» passava por total do dia.
-            footer: (items) => "Total (todas): " + nf(volumeChart.data.datasets
-              .reduce((a, ds) => a + ds.data[items[0].dataIndex], 0)),
-          } },
+                    labels: { sort: (a, b) => b.datasetIndex - a.datasetIndex, color: inkColor,
+                              boxWidth: Math.round(rem() * 0.7), boxHeight: Math.round(rem() * 0.7),
+                              usePointStyle: true, pointStyle: "rectRounded" } },
+          tooltip: {
+            itemSort: (a, b) => b.datasetIndex - a.datasetIndex,
+            callbacks: {
+              title: (items) => {
+                const b = volumeDados.buckets[items[0].dataIndex];
+                return b.partial ? `${b.label} — período ainda a decorrer` : b.label;
+              },
+              // Severidade, número exato e parte do total, numa linha: em três
+              // linhas por severidade a dica ficava mais alta do que o painel
+              // e cortava o Baixo e o total (2026-10-02). O valor desenhado
+              // leva um 0 para o fundo do eixo; este não.
+              label: (it) => {
+                const ds = it.dataset, k = it.dataIndex;
+                return ` ${ds.label}: ${nf(ds.reais[k])} incidentes · ${pctTxt(ds.pcts[k])} do total`;
+              },
+              // O total conta as quatro, mesmo as escondidas na legenda.
+              footer: (items) => `Total: ${nf(volumeChart.data.datasets[0].totais[items[0].dataIndex])} incidentes`,
+            },
+          },
         },
       },
     });
   } else {
-    // Atualiza-se campo a campo, sem trocar os datasets: é o que faz a
-    // escolha feita na legenda (mostrar/esconder) sobreviver ao refresh.
+    // Campo a campo, sem trocar os datasets: a escolha feita na legenda
+    // (mostrar/esconder) sobrevive ao refresh e à troca de modo.
     volumeChart.data.labels = labels;
     volumeChart.data.datasets.forEach((ds, i) => {
-      for (const k of ["data", "pointRadius", "pointBackgroundColor"]) ds[k] = datasets[i][k];
+      for (const k of ["data", "reais", "pcts", "totais", "pointRadius", "pointBackgroundColor", "segment"]) ds[k] = datasets[i][k];
     });
+    volumeChart.options.scales.y = volumeEixoY();
     volumeChart.update();
   }
   renderVolumeNote();
@@ -289,18 +367,31 @@ async function loadVolume() {
 let volumeMediumTotal = 0;
 let volumePartial = -1;
 function renderVolumeNote() {
+  // Só aparece se alguém esconder o «Médio» na legenda.
   const mediumIdx = SEV_ORDER.indexOf("medium");
   const hidden = volumeChart && !volumeChart.isDatasetVisible(mediumIdx);
   $("volume-note").hidden = !hidden;
   $("volume-note").textContent = `Médio oculto · ${nf(volumeMediumTotal)} casos no período`;
 }
 
-document.querySelectorAll(".seg button").forEach((b) =>
+document.querySelectorAll(".seg [data-range]").forEach((b) =>
   b.addEventListener("click", () => {
     volumeRange = b.dataset.range;
-    document.querySelectorAll(".seg button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".seg [data-range]").forEach((x) => x.classList.toggle("on", x === b));
     loadVolume().catch(fail);
   }));
+
+// Volume ↔ % do total: os mesmos dados, desenhados de outra maneira — não se
+// volta a pedir nada ao servidor.
+document.querySelectorAll(".seg [data-modo]").forEach((b) => {
+  b.classList.toggle("on", b.dataset.modo === volumeModo);
+  b.addEventListener("click", () => {
+    volumeModo = b.dataset.modo;
+    try { localStorage.setItem("ac360:volume-modo", volumeModo); } catch { /* sem storage */ }
+    document.querySelectorAll(".seg [data-modo]").forEach((x) => x.classList.toggle("on", x === b));
+    drawVolume();
+  });
+});
 
 /* ---------------- pausa ao passar o rato ---------------- */
 
@@ -583,18 +674,61 @@ async function boot() {
 }
 
 // O mapa corre no mesmo PC, na porta 8001: o mesmo host desta página.
-// Ao clicar, a página escurece antes de sair (ver style.css, «Passagem
-// suave»); com Ctrl/Shift ou no modo leve, sai logo.
+// Ao sair, a página escurece primeiro (ver style.css, «Passagem suave»);
+// com Ctrl/Shift ou no modo leve, sai logo.
+const MAPA_URL = `${location.protocol}//${location.hostname}:8001/`;
+function irParaMapa() {
+  if (LEVE) { location.href = MAPA_URL; return; }
+  document.documentElement.classList.add("saindo");
+  setTimeout(() => { location.href = MAPA_URL; }, 350);
+}
 try {
   const b = $("btn-mapa");
-  b.href = `${location.protocol}//${location.hostname}:8001/`;
+  b.href = MAPA_URL;
   b.addEventListener("click", (e) => {
-    if (LEVE || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
     e.preventDefault();
-    document.documentElement.classList.add("saindo");
-    setTimeout(() => { location.href = b.href; }, 350);
+    irParaMapa();
   });
 } catch { /* sem botão */ }
+
+// Alternância na TV (pedido do Miguel, 2026-10-02): 5 min sem ninguém mexer
+// no painel e passa para o mapa; o mapa volta ao fim de 2 min (mapa/). Mexer
+// (rato, teclado, toque) recomeça a contagem. ?rodar=0 desliga neste browser
+// (fica guardado), ?rodar=1 volta a ligar.
+const PAINEL_MS = 5 * 60_000;
+const RODAR = (() => {
+  const q = new URLSearchParams(location.search);
+  try {
+    if (q.has("rodar")) localStorage.setItem("ac360:rodar", q.get("rodar") === "0" ? "0" : "1");
+    return localStorage.getItem("ac360:rodar") !== "0";
+  } catch { return q.get("rodar") !== "0"; }
+})();
+let ultimaAtividade = Date.now();
+const ATIVIDADE = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"];
+const ouvirAtividade = (w) => ATIVIDADE.forEach((ev) =>
+  w.addEventListener(ev, () => { ultimaAtividade = Date.now(); }, { passive: true }));
+ouvirAtividade(window);
+// O Command Center é um iframe: os eventos de lá não chegam a esta janela, e
+// mexer o rato em cima dele não contava (visto no teste, 2026-10-02). É do
+// mesmo site, por isso ouve-se lá dentro também, a cada vez que carrega.
+document.querySelectorAll(".p-cc iframe").forEach((f) => {
+  const ligar = () => { try { ouvirAtividade(f.contentWindow); } catch { /* outro site */ } };
+  f.addEventListener("load", ligar);
+  if (f.contentDocument?.readyState === "complete") ligar();
+});
+if (RODAR) {
+  setInterval(() => {
+    if (Date.now() - ultimaAtividade < PAINEL_MS) return;
+    ultimaAtividade = Date.now();   // não tenta outra vez a cada 5 s se falhar
+    // Só sai se o mapa responder: com o serviço do mapa em baixo, a TV ia
+    // parar a uma página de erro e lá ficava. no-cors: basta saber que
+    // respondeu (outra porta, outro site).
+    fetch(`${MAPA_URL}api/estado`, { mode: "no-cors", cache: "no-store" })
+      .then(irParaMapa)
+      .catch(() => console.warn("Mapa de ataques sem resposta: fica o painel."));
+  }, 5000);
+}
 // Voltar com o «Retroceder» do browser pode trazer a página da cache ainda
 // escurecida: tira-se a classe.
 window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));

@@ -92,8 +92,12 @@
     <section class="panel p-volume">
       <div class="panel-head">
         <h2>Volume de Incidentes</h2>
+        <span class="escala-log" title="Cada linha do eixo vale 10× a de baixo (0, 10, 100, 1 000…): põe as quatro severidades, de ordens de grandeza diferentes, em faixas separadas. A dica dá os números exatos.">Escala logarítmica</span>
         <span class="warn" id="volume-warn" hidden>dados truncados</span>
         <span class="note" id="volume-note" hidden title="Clica em «Médio» na legenda para o mostrar"></span>
+        <div class="seg" role="group" aria-label="Medida">
+          <button data-modo="volume" class="on">Volume</button><button data-modo="pct">% do total</button>
+        </div>
         <div class="seg" role="group" aria-label="Período">
           <button data-range="24h">24h</button><button data-range="7d" class="on">7d</button><button data-range="30d">30d</button><button data-range="90d">90d</button>
         </div>

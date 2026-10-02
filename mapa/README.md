@@ -20,6 +20,13 @@ Adaptado de [zethw0w/ddos-attack-map](https://github.com/zethw0w/ddos-attack-map
 | Escuta em `0.0.0.0`, sem autenticação, exporta CSV | escuta em `127.0.0.1`, sem exportação | o mapa mostra IPs e nomes de sites |
 | Firewalls Palo Alto (pedido inicial) | Cloudflare | as Palo Alto no XSIAM são internas: medido a 2026-10-01, o tráfego negado vinha 100% de IPs internos |
 
+## Alternância com o painel
+
+Ao fim de 2 min sem ninguém mexer, o mapa volta ao painel (que passa para o
+mapa ao fim de 5 min parado). Mexer, incluindo rodar o globo, recomeça a
+contagem; com o painel em baixo, o mapa fica. `?rodar=0` desliga neste
+browser (fica guardado; `?rodar=1` liga).
+
 ## Como funciona
 
 `backend/feed.py` corre uma consulta XQL por minuto, sobre o minuto que
