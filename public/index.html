@@ -124,7 +124,10 @@
     </section>
 
     <section class="panel p-radar">
-      <div class="panel-head"><h2>Gravidade das Ameaças</h2></div>
+      <div class="panel-head"><h2>Táticas MITRE <span class="muted">· hoje vs. média de 7 dias</span></h2>
+        <!-- Legenda no cabeçalho, e não por baixo do radar: a altura que
+             ocupava fica para o gráfico. -->
+        <span class="radar-legenda" aria-hidden="true"><i class="l-media"></i><span id="radar-leg-media">Média 7 dias</span><i class="l-hoje"></i>Hoje (parcial)</span></div>
       <div class="radar-wrap">
         <div class="chart-box"><canvas id="radar-chart" aria-label="Casos por tática MITRE: hoje contra a média dos últimos 7 dias"></canvas></div>
         <div class="radar-note" id="radar-note"></div>

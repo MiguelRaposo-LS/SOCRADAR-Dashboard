@@ -339,6 +339,8 @@ def test_radar_compara_hoje_com_a_media_e_com_ontem():
     r = agg.radar(rows, SUMMER)
     cred = next(a for a in r["axes"] if a["id"] == "TA0006")
     assert (cred["today"], cred["yesterday"], cred["avg7d"]) == (6, 3, 1.0)
+    # O total dos 7 dias completos (sem hoje): 3 de ontem + 4 de há 3 dias.
+    assert cred["week"] == 7
     assert r["highlight"]["change_pct"] == 100
 
 

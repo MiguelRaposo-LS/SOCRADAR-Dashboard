@@ -574,45 +574,114 @@ $("cases-table").addEventListener("click", (e) => {
 
 /* ---------------- radar ---------------- */
 
+// Táticas MITRE: hoje (parcial) contra a média diária dos 7 dias completos
+// anteriores (aggregate.radar). Ao lado, a tática com mais casos hoje e a
+// comparação com ontem.
 let radarChart = null;
+let radarDados = null;
+const dec1 = (x) => x.toLocaleString("pt-PT", { maximumFractionDigits: 1 });
+const casos = (n) => `${nf(n)} caso${n === 1 ? "" : "s"}`;
+const horaAcores = (ms) => new Date(ms).toLocaleTimeString("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+
+// Dica de cada tática: hoje, média e variação, com os números reais. A
+// média vem do total dos 7 dias (week/7), sem o arredondamento do avg7d.
+function radarDica(k) {
+  const a = radarDados.axes[k];
+  const media = a.week / 7;
+  const linhas = [`Hoje (parcial): ${casos(a.today)}`, `Média 7 dias: ${dec1(media)} casos/dia`];
+  // Sem média não há variação que faça sentido (divisão por zero).
+  if (media > 0) {
+    const v = ((a.today - media) / media) * 100;
+    linhas.push(`Variação vs. média: ${v > 0 ? "+" : ""}${dec1(v)}%`);
+  } else if (a.today > 0) {
+    linhas.push("Sem casos nos 7 dias anteriores");
+  }
+  return linhas;
+}
 
 async function loadRadar() {
   const d = await api("/api/radar");
+  radarDados = d;
   const labels = d.axes.map((a) => a.name);
   const today = d.axes.map((a) => a.today);
   const avg = d.axes.map((a) => a.avg7d);
-  const cToday = v("--sev-high");
+  // «Hoje» na cor de destaque do painel; o laranja de antes era o do «Alto»
+  // e misturava o radar com as severidades. A média, neutra e tracejada.
+  const cToday = v("--accent");
   const cAvg = v("--ink-3");
   if (!radarChart) {
     radarChart = new Chart($("radar-chart"), {
       type: "radar",
       data: { labels, datasets: [
-        { label: "Média 7 dias", data: avg, borderColor: cAvg, backgroundColor: cAvg + "33", borderWidth: 2, borderDash: [5, 4], pointRadius: 2 },
-        { label: "Hoje (parcial)", data: today, borderColor: cToday, backgroundColor: cToday + "40", borderWidth: 2, pointRadius: 3, pointBackgroundColor: cToday },
+        { label: "Média 7 dias", data: avg, borderColor: cAvg, backgroundColor: cAvg + "22",
+          borderWidth: 1.5, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0 },
+        { label: "Hoje (parcial)", data: today, borderColor: cToday, backgroundColor: cToday + "40",
+          borderWidth: 2.5, pointRadius: Math.round(rem() * 0.22), pointHoverRadius: Math.round(rem() * 0.35),
+          pointBackgroundColor: cToday, pointBorderColor: v("--surface"), pointBorderWidth: 1 },
       ] },
       options: {
         responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+        // Passar perto de uma tática mostra-a toda, e não só o ponto da série.
+        interaction: { mode: "index", intersect: false },
+        // A área útil cresce: sem folga à volta, as etiquetas ainda cabem.
+        layout: { padding: 0 },
         scales: { r: { beginAtZero: true, angleLines: { color: gridColor }, grid: { color: gridColor },
-                       pointLabels: { color: inkColor, font: { size: Math.round(rem() * 0.75) } },
+                       pointLabels: { color: inkColor, padding: Math.round(rem() * 0.3),
+                                      font: { size: Math.round(rem() * 0.75) } },
                        ticks: { display: false, precision: 0 } } },
-        plugins: { legend: { position: "bottom", labels: { color: inkColor, boxWidth: Math.round(rem() * 0.7), boxHeight: Math.round(rem() * 0.7) } } },
+        plugins: {
+          // A legenda está no cabeçalho do painel (index.html, .radar-legenda).
+          legend: { display: false },
+          tooltip: {
+            // Uma dica por tática (a da série «Hoje»), com as duas séries lá dentro.
+            filter: (it) => it.datasetIndex === 1,
+            callbacks: {
+              title: (items) => items[0].label,
+              label: (it) => radarDica(it.dataIndex),
+              footer: () => radarDados.metrics_at ? `Hoje até às ${horaAcores(radarDados.metrics_at)} · ainda a decorrer` : "",
+            },
+          },
+        },
       },
     });
   } else {
+    radarChart.data.labels = labels;
     radarChart.data.datasets[0].data = avg;
     radarChart.data.datasets[1].data = today;
     radarChart.update();
   }
-  const h = d.highlight;
   radarChart.data.datasets[0].label = d.incomplete ? "Média 7 dias (a carregar)" : "Média 7 dias";
-  if (!h) {
-    $("radar-note").innerHTML = '<span class="muted">Sem casos com tática MITRE hoje.</span>';
-  } else {
-    const ch = h.change_pct;
-    const chTxt = ch === null ? "sem casos ontem"
-      : `<span class="${ch >= 0 ? "up" : "down"}">${ch >= 0 ? "▲ +" : "▼ "}${ch}%</span> face a ontem (${h.yesterday})`;
-    $("radar-note").innerHTML = `Tática mais ativa hoje<strong>${esc(h.name)}</strong>${h.today} casos · ${chTxt}`;
+  $("radar-leg-media").textContent = radarChart.data.datasets[0].label;
+  $("radar-note").innerHTML = radarInsight(d);
+}
+
+// O cartão ao lado: a tática com mais casos hoje (a do servidor, que já a
+// escolhe dos dados) e a comparação com ontem.
+function radarInsight(d) {
+  const rotulo = '<div class="ins-rotulo">Tática mais ativa hoje</div>';
+  if (d.incomplete) return `${rotulo}<div class="ins-ontem">A carregar…</div>`;
+  const h = d.highlight;
+  if (!h) return `${rotulo}<div class="ins-nome muted">Sem casos com tática MITRE hoje</div>`;
+  // Empate: o servidor fica com a primeira pela ordem das táticas; diz-se que
+  // há outras com o mesmo número, para não parecer que aquela se destaca.
+  const empate = d.axes.filter((a) => a.today === h.today && a.id !== h.id).map((a) => a.name);
+  // ((hoje − ontem) / ontem) × 100, feito no servidor (change_pct). O sinal
+  // está na seta: «▼ 33%», e não «▼ -33%». Com ontem = 0 não há percentagem.
+  let tend;
+  if (h.yesterday === 0) tend = '<div class="ins-trend up">Novo hoje</div><div class="ins-ontem">Sem casos ontem</div>';
+  else {
+    const c = h.change_pct;
+    const [cls, seta] = c > 0 ? ["up", "▲"] : c < 0 ? ["down", "▼"] : ["igual", "→"];
+    tend = `<div class="ins-trend ${cls}">${seta} ${nf(Math.abs(c))}% vs. ontem</div>`
+         + `<div class="ins-ontem">Ontem: ${casos(h.yesterday)}</div>`;
   }
+  const ate = d.metrics_at ? ` até às ${horaAcores(d.metrics_at)}` : "";
+  return rotulo
+    + `<div class="ins-nome">${esc(h.name)}</div>`
+    + (empate.length ? `<div class="ins-empate">empatada com ${esc(empate.join(", "))}</div>` : "")
+    + `<div class="ins-valor">${casos(h.today)}</div>`
+    + tend
+    + `<div class="ins-parcial">Hoje · parcial${ate}</div>`;
 }
 
 /* ---------------- briefing ---------------- */

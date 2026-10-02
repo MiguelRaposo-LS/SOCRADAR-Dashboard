@@ -114,7 +114,7 @@ paginação segue até vir uma página incompleta, com um teto
 | MTTR | **Mean Time To Resolve**: da criação à resolução, só casos resolvidos nas últimas 24h, sem os automáticos nem os duplicados (XQL). Acima de 120 min aparece em horas |
 | Volume | Casos por data de criação, no fuso dos Açores, uma linha por severidade, em **escala logarítmica** (0, 10, 100, 1 000…): o «Médio» é 96–99% dos casos e, numa escala linear, esmagava as outras. «Volume» mostra os casos; «% do total», a parte de cada severidade em cada período (soma 100%). Um 0 desenha-se no fundo do eixo. A dica dá, por severidade, os casos e a percentagem, e o total. O período de hoje (ou a hora atual, em 24h) vai a tracejado, com o ponto vazio |
 | Alertas mais críticos | Alertas das últimas 24h, os mais graves e recentes primeiro. O mesmo alerta no mesmo host junta-se numa linha, com «×N» |
-| Radar (Gravidade das Ameaças) | Casos, pelas táticas MITRE que o XSIAM lhes atribui. Um caso com duas táticas conta nas duas |
+| Táticas MITRE (radar) | Casos, pelas táticas MITRE que o XSIAM lhes atribui (um caso com duas táticas conta nas duas): hoje (parcial, até à última consulta) contra a média diária dos 7 dias completos anteriores. A dica dá hoje, a média e a variação face à média. Ao lado, a tática com mais casos hoje (com aviso de empate) e a variação face a ontem, `(hoje − ontem) / ontem`, com a seta a dar o sentido; sem casos ontem, «Novo hoje» |
 | Estado da API | Verde: última sincronização correu bem há menos de 10 min. Amarelo: falhou, ou está parada há mais de 10 min. Vermelho: falha e mais de 10 min sem dados, ou o servidor não responde |
 
 ## XSIAM Command Center

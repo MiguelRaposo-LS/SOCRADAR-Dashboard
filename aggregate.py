@@ -386,8 +386,11 @@ def radar(tactic_hours: list[dict], now: int) -> dict:
     today = _tactic_counts(tactic_hours, today0, now + HOUR)
     yday = _tactic_counts(tactic_hours, yday0, today0)
     week = _tactic_counts(tactic_hours, week0, today0)
+    # «week» (o total dos 7 dias) vai junto: com ele o ecrã faz a média e a
+    # variação sem o arredondamento do «avg7d».
     axes = [{"id": tid, "name": TACTIC_PT[tid], "today": today[tid],
-             "avg7d": round(week[tid] / 7, 1), "yesterday": yday[tid]} for tid in RADAR_AXES]
+             "avg7d": round(week[tid] / 7, 1), "week": week[tid], "yesterday": yday[tid]}
+            for tid in RADAR_AXES]
     lead = max(axes, key=lambda x: x["today"])
     highlight = None
     if lead["today"] > 0:
