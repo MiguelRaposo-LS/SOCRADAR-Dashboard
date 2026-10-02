@@ -159,7 +159,13 @@ foreach ($par in @(
         @('AppParameters', 'main.py'),
         @('AppDirectory', $backend),
         @('DisplayName', 'Azores Cyber 360 - Mapa de ataques'),
-        @('Start', 'SERVICE_AUTO_START'),
+        # Com atraso (~2 min depois do Windows): a arrancar logo, o serviço
+        # chegava antes da rede e falhava tudo com ConnectionError até à
+        # tentativa seguinte (visto no PC da TV a 2026-10-02).
+        @('Start', 'SERVICE_DELAYED_AUTO_START'),
+        # O Python no Windows escrevia o log em cp1252: «Sem liga  o» no lugar
+        # de «Sem ligação» (2026-10-02). Em UTF-8, lê-se bem.
+        @('AppEnvironmentExtra', 'PYTHONUTF8=1'),
         @('AppExit', 'Default', 'Restart'),
         @('AppRestartDelay', '5000'),
         @('AppStopMethodConsole', '5000'),

@@ -214,7 +214,11 @@ $nssm = ".\windows\nssm.exe"
 & $nssm install AzoresCyber360 "C:\AzoresCyber360\.venv\Scripts\python.exe" "server.py"
 & $nssm set AzoresCyber360 AppDirectory "C:\AzoresCyber360"
 & $nssm set AzoresCyber360 DisplayName "Azores Cyber 360 - SOC RADAR"
-& $nssm set AzoresCyber360 Start SERVICE_AUTO_START
+# Com atraso (~2 min depois do Windows): a arrancar logo, chegava antes da
+# rede e falhava tudo até à tentativa seguinte (visto a 2026-10-02).
+& $nssm set AzoresCyber360 Start SERVICE_DELAYED_AUTO_START
+# Log em UTF-8: sem isto, o Python no Windows escrevia «Sem liga  o».
+& $nssm set AzoresCyber360 AppEnvironmentExtra PYTHONUTF8=1
 
 # Se o processo cair, reinicia ao fim de 5 s.
 & $nssm set AzoresCyber360 AppExit Default Restart
@@ -239,6 +243,10 @@ mkdir C:\AzoresCyber360\logs -Force
 **Onde ver o que se passa:** `C:\AzoresCyber360\logs\servico.log`. O log
 mostra a recolha inicial, as métricas XQL, cada briefing gerado e os avisos
 (por exemplo, os casos que a chave não tem permissão para abrir).
+
+**Depois de ligar o PC:** os serviços arrancam ~2 min depois do Windows. Se o
+Ollama estiver no próprio PC, só arranca quando a sessão abre; até lá, o
+briefing fica com o texto anterior e o servidor tenta de 5 em 5 min.
 
 **Reinícios:** o estado grava-se em `C:\AzoresCyber360\estado` a cada 5 minutos
 e ao parar. Depois de um reinício do serviço ou do PC, os dados aparecem em
