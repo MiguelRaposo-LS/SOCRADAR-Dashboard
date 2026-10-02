@@ -217,8 +217,14 @@ h1, h2 { margin: 0; font-weight: 600; }
 .panel-head h2 { font-size: 1.05rem; margin-right: auto; }
 .chart-box { position: relative; flex: 1; min-height: 0; }
 /* Volume: diz que o eixo Y é logarítmico, onde se vê logo (ver app.js). */
-.escala-log { font-size: .75rem; color: var(--accent); border: 1px solid var(--accent); border-radius: 0.267rem;
-  padding: 0.067rem 0.4rem; white-space: nowrap; margin-right: auto; }
+.escala-log {
+  display: inline-flex; align-items: center; gap: 0.3rem; margin-right: auto; white-space: nowrap;
+  font-size: .72rem; font-weight: 600; letter-spacing: .02em; color: #a9c1f7;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 999px; padding: 0.1rem 0.6rem 0.1rem 0.45rem;
+}
+.escala-log svg { width: 0.75rem; height: 0.75rem; flex: none; }
 .p-volume .panel-head h2 { margin-right: 0; }   /* a etiqueta fica colada ao título */
 .note { font-size: .8rem; color: var(--ink-2); border: 1px dashed var(--sev-medium); border-radius: 0.267rem; padding: 0.067rem 0.4rem; }
 .warn {

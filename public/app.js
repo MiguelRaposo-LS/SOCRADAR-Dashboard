@@ -178,13 +178,12 @@ async function loadSummary() {
   applyStatus(d.status);
   if (!d.synced) return;
   for (const s of Object.keys(SEV)) $("k-" + s).textContent = nf(d.severity[s]);
-  // Histórico: abertos criados há mais de 90 dias, fora dos contadores.
   // Por baixo dos cartões (que contam só os de hoje): o total da janela de
-  // 90 dias e o histórico acumulado, em texto pequeno.
-  const bl = d.backlog && d.backlog.count;
+  // 90 dias, em texto pequeno. O histórico acumulado («+ N antigos por
+  // resolver») saiu do ecrã a 2026-10-02, a pedido do Miguel; continua no
+  // /api/summary (backlog).
   const parts = [];
   if (d.open_window !== undefined) parts.push(`${nf(d.open_window)} em 90 dias`);
-  if (bl !== null && bl !== undefined) parts.push(`+ ${nf(bl)} antigos por resolver`);
   $("k-backlog").hidden = !parts.length;
   $("k-backlog").textContent = parts.join(" · ");
   // Auto contido e MTTR vêm das métricas XQL: «–» até à 1.ª consulta chegar.

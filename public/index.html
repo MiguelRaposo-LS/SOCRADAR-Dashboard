@@ -63,7 +63,6 @@
     <div class="estado-grupo">
       <div class="fonte-dados">
         <span>Fonte: Cortex XSIAM - Governo Regional dos Açores</span>
-        <span>Nº de endpoints protegidos região UE</span>
       </div>
       <div class="api-status" id="api-status" data-state="a_sincronizar">
         <span class="dot" aria-hidden="true"></span>
@@ -92,7 +91,7 @@
     <section class="panel p-volume">
       <div class="panel-head">
         <h2>Volume de Incidentes</h2>
-        <span class="escala-log" title="Cada linha do eixo vale 10× a de baixo (0, 10, 100, 1 000…): põe as quatro severidades, de ordens de grandeza diferentes, em faixas separadas. A dica dá os números exatos.">Escala logarítmica</span>
+        <span class="escala-log" title="Cada linha do eixo vale 10× a de baixo (0, 10, 100, 1 000…): põe as quatro severidades, de ordens de grandeza diferentes, em faixas separadas. A dica dá os números exatos."><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 10.5C3 4 6 2.5 10.5 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Escala logarítmica</span>
         <span class="warn" id="volume-warn" hidden>dados truncados</span>
         <span class="note" id="volume-note" hidden title="Clica em «Médio» na legenda para o mostrar"></span>
         <div class="seg" role="group" aria-label="Medida">
@@ -139,12 +138,15 @@
     </section>
   </main>
 
-  <!-- Rodapé institucional. À esquerda, a barra oficial do PRR tal como foi
-       entregue (Fotos/), sem cortes nem cores mudadas: PRR, República
-       Portuguesa, Financiado pela União Europeia – NextGenerationEU. -->
+  <!-- Rodapé institucional. À esquerda, a barra oficial entregue pelo Miguel
+       (Fotos/PRR.svg, 2026-10-02), só com a área visível ajustada à faixa dos
+       logótipos — o SVG original é 1440×810 quase todo vazio. Sem cores
+       mudadas: PRR, Governo dos Açores, República Portuguesa, Financiado pela
+       União Europeia – NextGenerationEU, Modernização e Digitalização da
+       Administração Pública – RAA (C19). -->
   <footer class="rodape-institucional">
     <div class="rodape-logos">
-      <img src="assets/barra-prr.png" alt="PRR – Plano de Recuperação e Resiliência · República Portuguesa · Financiado pela União Europeia – NextGenerationEU">
+      <img src="assets/barra-prr.svg" alt="PRR – Plano de Recuperação e Resiliência · Governo dos Açores · República Portuguesa · Financiado pela União Europeia – NextGenerationEU · Modernização e Digitalização da Administração Pública – RAA (C19)">
     </div>
     <!-- O mapa de ataques é outra aplicação (mapa/), na porta 8001 do mesmo
          PC; o href certo põe-no o app.js. -->

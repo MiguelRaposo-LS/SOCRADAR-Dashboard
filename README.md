@@ -109,7 +109,6 @@ paginação segue até vir uma página incompleta, com um teto
 |---|---|
 | Crítico / Alto / Médio / Baixo | Casos com estado `new` ou `under_investigation` **criados hoje** (desde a meia-noite dos Açores; voltam a zero à meia-noite) |
 | «N em 90 dias» | Todos os casos abertos criados nos últimos 90 dias. É esta a janela da tabela Casos; os cartões e a tabela vêm da mesma recolha |
-| «+ N antigos por resolver» | Casos abertos criados há mais de 90 dias (o histórico acumulado), contados à parte a cada reconciliação |
 | Auto contido | Casos resolvidos nas últimas 24h com um estado `resolved_*auto*` (XQL) |
 | Ameaças bloqueadas | Alertas das últimas 24h com categoria de malware, spyware, vírus ou WildFire e ação *Blocked*/*Prevented*. Inclui o Anti-Spyware da NGFW |
 | MTTR | **Mean Time To Resolve**: da criação à resolução, só casos resolvidos nas últimas 24h, sem os automáticos nem os duplicados (XQL). Acima de 120 min aparece em horas |
@@ -184,8 +183,9 @@ O modelo tem de estar descarregado no Ollama: `ollama pull llama3.2:3b`.
 
 ## Por confirmar
 
-- O rodapé mostra a barra oficial do **PRR** (`public/assets/barra-prr.png`,
-  reduzida da original em `Fotos/`), mas o texto diz «Cofinanciado no âmbito
+- O rodapé mostra a barra oficial do **PRR** (`public/assets/barra-prr.svg`:
+  a `Fotos/PRR.svg` só com a área visível ajustada à faixa dos logótipos),
+  mas o texto diz «Cofinanciado no âmbito
   do PRR», e a barra diz «Financiado pela União Europeia». Confirmar qual é a
   formulação certa.
 - O Chart.js vem do jsDelivr. Se o posto do monitor não tiver acesso à
