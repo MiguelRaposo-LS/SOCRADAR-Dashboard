@@ -12,8 +12,8 @@
    endereço. Quem entra vê esse «#bandeira», abre com a bandeira já no ecrã e
    desvanece-a. No modo leve (html.leve) muda logo, sem animação.
 
-   A ondulação é a bandeira cortada em faixas verticais, cada uma a subir e a
-   descer um pouco desfasada da vizinha: só transform, barato para o PC da TV. */
+   A ondulação desenha-se num canvas, em fatias de 2 px deslocadas por uma
+   onda contínua (ver ondular). */
 (function () {
   "use strict";
   const script = document.currentScript;
@@ -22,7 +22,9 @@
   // Miguel, Fotos/governo-dos-acores-vector-logo.png, recortado à margem).
   const LOGO = (script && script.dataset.logo) || "governo-acores.png";
   const MARCA = "#bandeira";
-  const FAIXAS = 28;
+  // Onda: amplitude em fração da altura da bandeira (o canvas tem essa folga
+  // em cima e em baixo), comprimento ~0,8 da largura, um ciclo a cada 1,3 s.
+  const AMPL = 0.035, ONDAS = 1.25, PERIODO_S = 1.3, FATIA = 2;
   const SAIR_MS = 1300;      // da bandeira a aparecer até a página mudar
   const FICAR_MS = 700;      // quanto fica no ecrã na página que entra
   const DESVANECER_MS = 600;
@@ -33,16 +35,9 @@
   opacity: 0; transition: opacity .4s ease-out; pointer-events: none; }
 .trans-bandeira.visivel { opacity: 1; }
 .trans-bandeira.sai { opacity: 0; transition: opacity ${DESVANECER_MS}ms ease-in; }
-.trans-bandeira .tb-flag { display: flex; width: min(44vw, 60vh); aspect-ratio: 3 / 2;
-  filter: drop-shadow(0 1.2vh 2.4vh rgba(0, 0, 0, .55));
+.trans-bandeira .tb-flag { display: block; width: min(44vw, 60vh); aspect-ratio: ${3 / (2 * (1 + 2 * AMPL))};
   transform: scale(.9); opacity: 0; transition: transform .7s cubic-bezier(.2, .8, .2, 1), opacity .5s ease-out; }
 .trans-bandeira.visivel .tb-flag { transform: scale(1); opacity: 1; }
-.trans-bandeira .tb-flag span { flex: 1; height: 100%; background-repeat: no-repeat;
-  background-size: ${FAIXAS * 100}% 100%; animation: tb-onda 1.4s ease-in-out infinite; }
-@keyframes tb-onda {
-  0%, 100% { transform: translateY(-1.6%); filter: brightness(1.04); }
-  50% { transform: translateY(1.6%); filter: brightness(.88); }
-}
 .trans-bandeira .tb-logo { background: #fff; border-radius: .9vh; padding: 1.1vh 1.6vh;
   box-shadow: 0 .8vh 2vh rgba(0, 0, 0, .45);
   transform: translateY(1.5vh); opacity: 0; transition: transform .7s .15s cubic-bezier(.2, .8, .2, 1), opacity .5s .15s ease-out; }
@@ -63,16 +58,8 @@
     const ov = document.createElement("div");
     ov.className = "trans-bandeira";
     ov.setAttribute("aria-hidden", "true");
-    const flag = document.createElement("div");
+    const flag = document.createElement("canvas");
     flag.className = "tb-flag";
-    for (let i = 0; i < FAIXAS; i++) {
-      const f = document.createElement("span");
-      f.style.backgroundImage = `url("${BANDEIRA}")`;
-      f.style.backgroundPosition = `${(i / (FAIXAS - 1)) * 100}% 0`;
-      // Desfasada da vizinha: a onda corre da esquerda (o mastro) para a direita.
-      f.style.animationDelay = `${-i * 0.06}s`;
-      flag.appendChild(f);
-    }
     ov.appendChild(flag);
     // O logótipo aparece dos dois lados (na página que sai e na que entra):
     // assim a bandeira fica no mesmo sítio e não dá um salto na passagem.
@@ -84,7 +71,47 @@
     logo.appendChild(img);
     ov.appendChild(logo);
     document.body.appendChild(ov);
+    ondular(flag);
     return ov;
+  }
+
+  // A bandeira a ondular, desenhada num canvas em fatias de 2 px, cada uma
+  // deslocada por uma onda contínua e sombreada pela inclinação dela. A
+  // primeira versão (faixas de CSS) mostrava retângulos e costuras; aqui a
+  // diferença entre fatias vizinhas é de décimos de píxel e não se vê.
+  // O lado do mastro (esquerdo) quase não mexe; a onda cresce para a ponta.
+  function ondular(cv) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W = Math.round(cv.clientWidth * dpr), Ht = Math.round(cv.clientHeight * dpr);
+    if (!W || !Ht) return;
+    cv.width = W; cv.height = Ht;
+    const H = Math.round(Ht / (1 + 2 * AMPL)), A = (Ht - H) / 2;
+    const ctx = cv.getContext("2d");
+    const pano = document.createElement("canvas");   // a bandeira parada, já no tamanho
+    pano.width = W; pano.height = H;
+    const img = new Image();
+    let t0 = 0;
+    const frame = (now) => {
+      if (!cv.isConnected) return;                    // a transição acabou
+      if (!t0) t0 = now;
+      const t = (now - t0) / 1000;
+      ctx.clearRect(0, 0, W, Ht);
+      for (let x = 0; x < W; x += FATIA) {
+        const u = x / W;
+        const fase = u * ONDAS * 2 * Math.PI - (t / PERIODO_S) * 2 * Math.PI;
+        const amp = A * (0.15 + 0.85 * u);
+        const y = A + amp * Math.sin(fase);
+        const w = Math.min(FATIA, W - x);
+        ctx.drawImage(pano, x, 0, w, H, x, y, w, H);
+        // Luz: a face virada para cima mais clara, a de baixo mais escura.
+        const luz = Math.cos(fase) * (0.25 + 0.75 * u);
+        ctx.fillStyle = luz > 0 ? `rgba(255,255,255,${(0.10 * luz).toFixed(3)})` : `rgba(0,0,0,${(-0.18 * luz).toFixed(3)})`;
+        ctx.fillRect(x, y, w, H);
+      }
+      requestAnimationFrame(frame);
+    };
+    img.onload = () => { pano.getContext("2d").drawImage(img, 0, 0, W, H); requestAnimationFrame(frame); };
+    img.src = BANDEIRA;
   }
 
   const leve = () => document.documentElement.classList.contains("leve");
