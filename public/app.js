@@ -775,6 +775,8 @@ async function boot() {
 // com Ctrl/Shift ou no modo leve, sai logo.
 const MAPA_URL = `${location.protocol}//${location.hostname}:8001/`;
 function irParaMapa() {
+  // A bandeira dos Açores a ondular (transicao.js); sem ela, o escurecer simples.
+  if (window.TransicaoAcores) { TransicaoAcores.sair(MAPA_URL, "Mapa de ataques"); return; }
   if (LEVE) { location.href = MAPA_URL; return; }
   document.documentElement.classList.add("saindo");
   setTimeout(() => { location.href = MAPA_URL; }, 350);

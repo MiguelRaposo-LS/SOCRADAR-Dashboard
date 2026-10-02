@@ -855,3 +855,11 @@ def test_fontes_so_com_nome_nao_levam_icone(client):
     src = client.get("/api/command-center", headers=auth()).json["sources"]
     assert src[0]["name_only"] is True and src[0]["icon"] is None
     assert src[1]["name_only"] is False
+
+
+def test_transicao_igual_no_painel_e_no_mapa():
+    # O painel e o mapa servem cada um a sua cópia (portas diferentes); têm de
+    # ser iguais, senão a transição de ida e a de volta divergem.
+    raiz = Path(__file__).resolve().parent.parent
+    for nome, mapa in (("transicao.js", "transicao.js"), ("assets/bandeira-acores.svg", "bandeira-acores.svg")):
+        assert (raiz / "public" / nome).read_bytes() == (raiz / "mapa/frontend/app/public" / mapa).read_bytes()

@@ -138,7 +138,11 @@ function useEscala(): number {
 // O painel está noutra porta (outro site, para o browser): a transição nativa
 // entre páginas não serve. Escurece-se esta antes de sair (index.css) e o
 // painel aparece do escuro. Com Ctrl/Shift sai logo.
+// A bandeira dos Açores a ondular (public/transicao.js, carregado no
+// index.html); sem ela, o escurecer simples.
+declare global { interface Window { TransicaoAcores?: { sair: (url: string, destino: string) => void } } }
 function irParaPainel() {
+  if (window.TransicaoAcores) { window.TransicaoAcores.sair(PAINEL_URL, "Painel principal"); return; }
   document.documentElement.classList.add("saindo");
   setTimeout(() => { location.href = PAINEL_URL; }, 350);
 }
