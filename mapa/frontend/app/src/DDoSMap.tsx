@@ -217,12 +217,15 @@ export default function DDoSMap() {
     // «mousemove» sem o rato se mexer quando o que está por baixo do cursor
     // muda — aqui, a lista dos últimos travados 2×/s —, e a volta ao painel
     // ficava à espera para sempre (PC da TV, 2026-10-02).
-    let rx: number | null = null, ry: number | null = null;
+    // E só um movimento GRANDE: 60 px ou mais em relação a onde o rato estava
+    // há 1 s — no PC da TV o rato tremia sozinho, depressa e pouco (2026-10-02).
+    let rasto: [number, number, number][] = [];
     const mexeu = (e: Event) => {
       if (e.type === "mousemove") {
-        const m = e as MouseEvent;
-        const longe = rx !== null && ry !== null && Math.abs(m.screenX - rx) + Math.abs(m.screenY - ry) >= 3;
-        if (rx === null || longe) { rx = m.screenX; ry = m.screenY; }
+        const m = e as MouseEvent, t = performance.now();
+        rasto = rasto.filter((p) => t - p[0] <= 1000);
+        const longe = rasto.some((p) => Math.hypot(m.screenX - p[1], m.screenY - p[2]) >= 60);
+        rasto = longe ? [[t, m.screenX, m.screenY]] : [...rasto, [t, m.screenX, m.screenY]];
         if (!longe) return;
       }
       ultima = Date.now();
@@ -240,7 +243,7 @@ export default function DDoSMap() {
       fetch(`${PAINEL_URL}api/ping`, { mode: "no-cors", cache: "no-store" })
         .then(irParaPainel)
         .catch(() => console.warn("Painel sem resposta: fica o mapa."));
-    }, 5000);
+    }, 1000);   // de segundo a segundo: a contagem mostra os segundos
     return () => { clearInterval(id); evs.forEach((ev) => window.removeEventListener(ev, mexeu)); };
   }, []);
 
@@ -521,7 +524,7 @@ export default function DDoSMap() {
         )}
         <div style={{ marginLeft: "auto" }} />
         {voltaEm !== null && (
-          <div style={st.voltaEm}>painel em {voltaEm < 60_000 ? "<1" : Math.ceil(voltaEm / 60_000)} min</div>
+          <div style={st.voltaEm}>painel em {Math.floor(voltaEm / 60_000)}:{String(Math.floor(voltaEm / 1000) % 60).padStart(2, "0")}</div>
         )}
         <div style={st.relogio}>{hora(agora)} <span style={st.tz}>Açores</span></div>
       </div>

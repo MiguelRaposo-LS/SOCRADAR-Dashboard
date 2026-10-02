@@ -409,15 +409,24 @@ let lastMouseMove = 0;
 // mapa à espera para sempre (PC da TV, 2026-10-02). Só conta um movimento a
 // sério: a posição no ecrã mudou 3 px ou mais (também ignora o tremor de um
 // rato sem fios). screenX/Y são do ecrã, iguais no iframe do Command Center.
-let ratoX = null, ratoY = null;
+//
+// No PC da TV o rato também se mexia sozinho, depressa e pouco (tremor), e a
+// contagem não descia (2026-10-02). Por isso conta só um movimento GRANDE:
+// 60 px ou mais em relação a onde o rato estava há 1 s. Um tremor de um lado
+// para o outro, ou um deslize lento, não chega lá; uma mão no rato chega.
+const RATO_PX = 60, RATO_MS = 1000;
+let rastoRato = [];   // [t, x, y] do último segundo
 // A decisão fica no próprio evento: o mesmo movimento passa por vários
-// ouvintes (cursor, alternância), e o segundo, a comparar com a posição que o
-// primeiro acabou de guardar, achava sempre que o rato não se mexera.
+// ouvintes (cursor, alternância), e cada um a decidir por si via o rasto já
+// atualizado pelo anterior.
 function moveuMesmo(e) {
   if (e.__moveu !== undefined) return e.__moveu;
-  let moveu = false;
-  if (ratoX !== null && Math.abs(e.screenX - ratoX) + Math.abs(e.screenY - ratoY) >= 3) moveu = true;
-  if (ratoX === null || moveu) { ratoX = e.screenX; ratoY = e.screenY; }
+  const t = performance.now();
+  rastoRato = rastoRato.filter((p) => t - p[0] <= RATO_MS);
+  const moveu = rastoRato.some((p) => Math.hypot(e.screenX - p[1], e.screenY - p[2]) >= RATO_PX);
+  rastoRato.push([t, e.screenX, e.screenY]);
+  // Depois de contar, o rasto recomeça: o mesmo gesto não conta 30 vezes.
+  if (moveu) rastoRato = [[t, e.screenX, e.screenY]];
   e.__moveu = moveu;
   return moveu;
 }
@@ -828,11 +837,13 @@ function mostrarContagem() {
   const ha = Math.round((Date.now() - ultimaAtividade) / 1000);
   // A causa só enquanto é recente: se a contagem não desce, diz porquê.
   const causa = ultimaCausa && ha < 60 ? ` · ${ultimaCausa} há ${ha} s` : "";
-  el.textContent = (mapaSemResposta ? "mapa sem resposta" : falta < 60_000 ? "mapa em <1 min" : `mapa em ${Math.ceil(falta / 60_000)} min`) + causa;
+  const mmss = `${Math.floor(falta / 60_000)}:${String(Math.floor(falta / 1000) % 60).padStart(2, "0")}`;
+  el.textContent = (mapaSemResposta ? "mapa sem resposta" : `mapa em ${mmss}`) + causa;
   // Ao passar o rato: quando abriu a página (para se ver se está a recarregar).
   el.title = `Página aberta às ${new Date(PAGINA_ABERTA).toLocaleTimeString("pt-PT", { timeZone: TZ })}`;
 }
 if (RODAR) {
+  // De segundo a segundo: a contagem mostra os segundos (mapa em 4:30).
   setInterval(() => {
     mostrarContagem();
     if (Date.now() - ultimaAtividade < PAINEL_MS) return;
@@ -843,7 +854,7 @@ if (RODAR) {
     fetch(`${MAPA_URL}api/estado`, { mode: "no-cors", cache: "no-store" })
       .then(() => { mapaSemResposta = false; irParaMapa(); })
       .catch(() => { mapaSemResposta = true; console.warn("Mapa de ataques sem resposta: fica o painel."); });
-  }, 5000);
+  }, 1000);
 }
 mostrarContagem();
 // Voltar com o «Retroceder» do browser pode trazer a página da cache ainda
