@@ -42,7 +42,10 @@ def _age(ms: int | None, now: int) -> str:
 
 
 def facts(incidents, alerts, metrics, now) -> dict:
-    """Os números que o ecrã está a mostrar agora, com as mesmas funções."""
+    """Os números que o ecrã está a mostrar agora, com as mesmas funções.
+    Sem o que vem só da firewall (aggregate.is_noise), como o ecrã; as
+    ameaças bloqueadas continuam a contar com ela, como no cabeçalho."""
+    incidents = agg.without_noise(incidents)
     open_ = agg.open_by_priority(incidents)
     hosts: dict[str, int] = {}
     for i in open_:
@@ -58,7 +61,7 @@ def facts(incidents, alerts, metrics, now) -> dict:
                    "hosts": i["hosts"][:3], "idade": _age(i["created"], now)}
                   for i in open_ if i["severity"] in ("critical", "high")][:6],
         "hosts_varios": [(h, n) for h, n in sorted(hosts.items(), key=lambda x: -x[1]) if n > 1][:3],
-        "alertas": agg.top_alerts(alerts, now, 5),
+        "alertas": agg.top_alerts([a for a in alerts if not agg.is_noise_alert(a)], now, 5),
         "taticas": sorted((t for t in mitre["tactics"] if t["count"]), key=lambda t: -t["count"])[:4],
         "tecnicas": mitre["techniques"][:3],
         "radar": agg.radar(metrics["tactics"], now)["highlight"],

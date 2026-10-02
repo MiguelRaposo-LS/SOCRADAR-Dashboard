@@ -108,7 +108,8 @@ paginação segue até vir uma página incompleta, com um teto
 | No ecrã | O que conta |
 |---|---|
 | Crítico / Alto / Médio / Baixo | Casos com estado `new` ou `under_investigation` **criados hoje** (desde a meia-noite dos Açores; voltam a zero à meia-noite) |
-| «N em 90 dias» | Todos os casos abertos criados nos últimos 90 dias. É esta a janela da tabela Casos; os cartões e a tabela vêm da mesma recolha |
+| «N em 90 dias» | Todos os casos abertos criados nos últimos 90 dias; os cartões e a tabela Casos (que mostra os dos últimos 3 dias) vêm da mesma recolha |
+| Casos só da firewall | Os casos cuja única fonte de deteção é a **PAN NGFW** não contam nos cartões, na tabela nem no briefing: são quase todos ruído. Um caso com outra fonte além da firewall conta. As «Ameaças bloqueadas», o volume e o radar não mudam (`aggregate.is_noise`) |
 | Auto contido | Casos resolvidos nas últimas 24h com um estado `resolved_*auto*` (XQL) |
 | Ameaças bloqueadas | Alertas das últimas 24h com categoria de malware, spyware, vírus ou WildFire e ação *Blocked*/*Prevented*. Inclui o Anti-Spyware da NGFW |
 | MTTR | **Mean Time To Resolve**: da criação à resolução, só casos resolvidos nas últimas 24h, sem os automáticos nem os duplicados (XQL). Acima de 120 min aparece em horas |
@@ -158,7 +159,7 @@ GRA, lidos do XSIAM. É uma aplicação à parte (FastAPI, porta 8001, serviço
 `MapaAtaques`), adaptada do `zethw0w/ddos-attack-map`, e o instalador do
 painel instala-a no fim. Tudo em [mapa/README.md](mapa/README.md).
 
-**Alternância na TV:** 5 min sem ninguém mexer no painel e passa para o mapa;
+**Alternância na TV** (a contagem aparece no rodapé, «mapa em N min»): 5 min sem ninguém mexer no painel e passa para o mapa;
 o mapa volta ao painel ao fim de 2 min. Mexer (rato, teclado, toque, também
 em cima do Command Center ou a rodar o globo) recomeça a contagem. Só muda se
 o outro lado responder: com o mapa em baixo, o painel fica. `?rodar=0` no

@@ -176,6 +176,7 @@ export default function DDoSMap() {
   const [ligado, setLigado] = useState(false);
   const [servidor, setServidor] = useState<EstadoServidor | null>(null);
   const [agora, setAgora] = useState(Date.now());
+  const [voltaEm, setVoltaEm] = useState<number | null>(RODAR ? MAPA_MS : null);   // ms até voltar ao painel
   const k = useEscala();
 
   const desenhar = useCallback((a: Ataque) => {
@@ -212,11 +213,26 @@ export default function DDoSMap() {
   useEffect(() => {
     if (!RODAR) return;
     let ultima = Date.now();
-    const mexeu = () => { ultima = Date.now(); };
+    // Só um movimento a sério conta (≥ 3 px no ecrã): o Chromium manda
+    // «mousemove» sem o rato se mexer quando o que está por baixo do cursor
+    // muda — aqui, a lista dos últimos travados 2×/s —, e a volta ao painel
+    // ficava à espera para sempre (PC da TV, 2026-10-02).
+    let rx: number | null = null, ry: number | null = null;
+    const mexeu = (e: Event) => {
+      if (e.type === "mousemove") {
+        const m = e as MouseEvent;
+        const longe = rx !== null && ry !== null && Math.abs(m.screenX - rx) + Math.abs(m.screenY - ry) >= 3;
+        if (rx === null || longe) { rx = m.screenX; ry = m.screenY; }
+        if (!longe) return;
+      }
+      ultima = Date.now();
+      setVoltaEm(Math.max(0, MAPA_MS - (Date.now() - Math.max(ultima, interacaoRef.current))));
+    };
     const evs = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"] as const;
     evs.forEach((ev) => window.addEventListener(ev, mexeu, { passive: true }));
     const id = setInterval(() => {
       const parado = Date.now() - Math.max(ultima, interacaoRef.current);
+      setVoltaEm(Math.max(0, MAPA_MS - parado));
       if (parado < MAPA_MS) return;
       ultima = Date.now();   // não tenta outra vez a cada 5 s se falhar
       // Só sai se o painel responder: com o painel em baixo, a TV ia parar a
@@ -503,6 +519,10 @@ export default function DDoSMap() {
         {agora - interacaoRef.current < LIVRE_MS && (
           <div style={st.livre}>Modo livre · volta à animação em {Math.ceil((LIVRE_MS - (agora - interacaoRef.current)) / 1000)} s</div>
         )}
+        <div style={{ marginLeft: "auto" }} />
+        {voltaEm !== null && (
+          <div style={st.voltaEm}>painel em {voltaEm < 60_000 ? "<1" : Math.ceil(voltaEm / 60_000)} min</div>
+        )}
         <div style={st.relogio}>{hora(agora)} <span style={st.tz}>Açores</span></div>
       </div>
 
@@ -619,7 +639,8 @@ const st: Record<string, React.CSSProperties> = {
   statusBadge: { display: "flex", alignItems: "center", gap: "6px", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 600, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" },
   statusDot: { width: "8px", height: "8px", borderRadius: "50%" },
   livre: { fontSize: "12px", fontWeight: 600, color: "#4fc3f7", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(79,195,247,0.4)", background: "rgba(79,195,247,0.08)" },
-  relogio: { marginLeft: "auto", fontSize: "18px", fontWeight: 700, fontVariantNumeric: "tabular-nums" },
+  voltaEm: { fontSize: "11px", color: "#8899aa", whiteSpace: "nowrap" },
+  relogio: { marginLeft: "16px", fontSize: "18px", fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   tz: { fontSize: "11px", fontWeight: 500, color: "#8899aa" },
 
   leftPanel: { position: "absolute", top: "56px", left: "12px", width: "330px", zIndex: 10, ...glass, padding: "14px", display: "flex", flexDirection: "column", gap: "10px" },

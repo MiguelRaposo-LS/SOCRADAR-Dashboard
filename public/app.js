@@ -402,7 +402,27 @@ document.querySelectorAll(".seg [data-modo]").forEach((b) => {
 const IDLE_MS = 30_000;
 const PIN_MS = 120_000;
 let lastMouseMove = 0;
-document.addEventListener("mousemove", () => {
+// O Chromium (Edge) manda «mousemove» sem o rato se mexer sempre que o que
+// está por baixo do cursor muda — a tabela a deslizar, um gráfico a
+// redesenhar —, para atualizar o hover. Com o rato parado em cima do painel,
+// isso mantinha o cursor à vista, a tabela em pausa e a alternância para o
+// mapa à espera para sempre (PC da TV, 2026-10-02). Só conta um movimento a
+// sério: a posição no ecrã mudou 3 px ou mais (também ignora o tremor de um
+// rato sem fios). screenX/Y são do ecrã, iguais no iframe do Command Center.
+let ratoX = null, ratoY = null;
+// A decisão fica no próprio evento: o mesmo movimento passa por vários
+// ouvintes (cursor, alternância), e o segundo, a comparar com a posição que o
+// primeiro acabou de guardar, achava sempre que o rato não se mexera.
+function moveuMesmo(e) {
+  if (e.__moveu !== undefined) return e.__moveu;
+  let moveu = false;
+  if (ratoX !== null && Math.abs(e.screenX - ratoX) + Math.abs(e.screenY - ratoY) >= 3) moveu = true;
+  if (ratoX === null || moveu) { ratoX = e.screenX; ratoY = e.screenY; }
+  e.__moveu = moveu;
+  return moveu;
+}
+document.addEventListener("mousemove", (e) => {
+  if (!moveuMesmo(e)) return;
   lastMouseMove = Date.now();
   document.body.classList.remove("idle-cursor");
 });
@@ -774,8 +794,12 @@ const RODAR = (() => {
 })();
 let ultimaAtividade = Date.now();
 const ATIVIDADE = ["mousemove", "mousedown", "keydown", "wheel", "touchstart"];
+// «mousemove» só conta se o rato mudou mesmo de posição (moveuMesmo, acima).
 const ouvirAtividade = (w) => ATIVIDADE.forEach((ev) =>
-  w.addEventListener(ev, () => { ultimaAtividade = Date.now(); }, { passive: true }));
+  w.addEventListener(ev, (e) => {
+    if (ev === "mousemove" && !moveuMesmo(e)) return;
+    ultimaAtividade = Date.now();
+  }, { passive: true }));
 ouvirAtividade(window);
 // O Command Center é um iframe: os eventos de lá não chegam a esta janela, e
 // mexer o rato em cima dele não contava (visto no teste, 2026-10-02). É do
@@ -785,18 +809,32 @@ document.querySelectorAll(".p-cc iframe").forEach((f) => {
   f.addEventListener("load", ligar);
   if (f.contentDocument?.readyState === "complete") ligar();
 });
+// Contagem discreta no rodapé: diz quando passa para o mapa — e, se nunca
+// avançar, que alguma coisa está a contar como «mexer» (foi assim que se
+// deu pelos mousemove falsos, 2026-10-02).
+let mapaSemResposta = false;
+function mostrarContagem() {
+  const el = $("rodar-info");
+  if (!el) return;
+  el.hidden = !RODAR;
+  if (!RODAR) return;
+  const falta = Math.max(0, PAINEL_MS - (Date.now() - ultimaAtividade));
+  el.textContent = mapaSemResposta ? "mapa sem resposta" : falta < 60_000 ? "mapa em <1 min" : `mapa em ${Math.ceil(falta / 60_000)} min`;
+}
 if (RODAR) {
   setInterval(() => {
+    mostrarContagem();
     if (Date.now() - ultimaAtividade < PAINEL_MS) return;
     ultimaAtividade = Date.now();   // não tenta outra vez a cada 5 s se falhar
     // Só sai se o mapa responder: com o serviço do mapa em baixo, a TV ia
     // parar a uma página de erro e lá ficava. no-cors: basta saber que
     // respondeu (outra porta, outro site).
     fetch(`${MAPA_URL}api/estado`, { mode: "no-cors", cache: "no-store" })
-      .then(irParaMapa)
-      .catch(() => console.warn("Mapa de ataques sem resposta: fica o painel."));
+      .then(() => { mapaSemResposta = false; irParaMapa(); })
+      .catch(() => { mapaSemResposta = true; console.warn("Mapa de ataques sem resposta: fica o painel."); });
   }, 5000);
 }
+mostrarContagem();
 // Voltar com o «Retroceder» do browser pode trazer a página da cache ainda
 // escurecida: tira-se a classe.
 window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));

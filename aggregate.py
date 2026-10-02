@@ -251,6 +251,27 @@ def _priority_key(inc: dict):
     return (SEV_RANK.get(inc["severity"], 0), inc["created"] or 0)
 
 
+# Casos detetados só pela firewall (PAN NGFW) saem do cabeçalho, da tabela e
+# do briefing: são quase todos ruído — assinaturas disparadas por máquinas
+# internas — e tapavam os que pedem atenção (pedido do Miguel, 2026-10-02;
+# eram 5 de 16 na tabela). Um caso com outra fonte além da firewall fica:
+# está corroborado. As «ameaças bloqueadas», o volume e o radar não mudam.
+NOISE_SOURCES = {"pan ngfw"}
+
+
+def is_noise(inc: dict) -> bool:
+    srcs = {str(s).strip().lower() for s in inc.get("sources") or [] if s}
+    return bool(srcs) and srcs <= NOISE_SOURCES
+
+
+def without_noise(incidents: list[dict]) -> list[dict]:
+    return [i for i in incidents if not is_noise(i)]
+
+
+def is_noise_alert(alert: dict) -> bool:
+    return str(alert.get("source") or "").strip().lower() in NOISE_SOURCES
+
+
 def open_by_priority(incidents: list[dict]) -> list[dict]:
     return sorted((i for i in incidents if is_open(i)), key=_priority_key, reverse=True)
 
@@ -265,7 +286,8 @@ CASES_WINDOW_MS = 3 * DAY
 def table_cases(incidents: list[dict], now: int) -> list[dict]:
     """Os casos da tabela, pela ordem em que aparecem: abertos, dos últimos
     3 dias, mais graves e mais recentes primeiro."""
-    return [i for i in open_by_priority(incidents) if (i["created"] or 0) >= now - CASES_WINDOW_MS]
+    return [i for i in open_by_priority(without_noise(incidents))
+            if (i["created"] or 0) >= now - CASES_WINDOW_MS]
 
 
 def _entity(values: list[str]) -> str | None:

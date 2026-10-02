@@ -434,10 +434,13 @@ body.pagina-paineis { overflow: auto; height: auto; min-height: 100%; }
 .cc-flow .cc-ini { font-size: 10px; font-weight: 700; }
 
 .btn-mapa {
-  color: var(--ink); text-decoration: none; white-space: nowrap; margin-left: 0.533rem;
+  color: var(--ink); text-decoration: none; white-space: nowrap;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.4rem;
   padding: 0.3rem 0.8rem; font-size: .8rem;
 }
+/* «mapa em N min»: a alternância automática (app.js), discreta. */
+.rodape-mapa { display: flex; align-items: center; gap: 0.533rem; }
+.rodar-info { font-size: .72rem; color: var(--ink-3); white-space: nowrap; }
 .btn-mapa:hover { border-color: var(--accent); }
 /* Modo leve (?leve, ver app.js): nada se mexe sem necessidade. */
 html.leve .radar-varrimento, html.leve .radar-ponto, html.leve .cc-anel { animation: none !important; }

@@ -126,6 +126,7 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
     @app.get("/api/summary")
     def summary():
         inc, al, _ = store.snapshot()
+        inc = agg.without_noise(inc)          # sem os casos só da firewall (aggregate.is_noise)
         m, m_at = store.metrics_snapshot()
         now = now_ms()
         resolved = m["resolved"] if m else None

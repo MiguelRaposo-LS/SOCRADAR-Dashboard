@@ -93,6 +93,30 @@ def test_tabela_ordena_por_severidade_e_depois_recencia():
     assert [r["id"] for r in agg.case_rows(incs, {}, SUMMER, 60)] == ["3", "2", "1"]
 
 
+def fw(id, sources, **kw):
+    i = inc(id, **kw)
+    i["sources"] = sources
+    return i
+
+
+def test_casos_so_da_firewall_saem_da_tabela_mas_os_corroborados_ficam():
+    # PAN NGFW sozinha é quase tudo ruído; com o agente ao lado está corroborado.
+    incs = [fw(1, ["PAN NGFW"], created=SUMMER), fw(2, ["XDR Agent"], created=SUMMER),
+            fw(3, ["PAN NGFW", "XDR Agent"], created=SUMMER), fw(4, [], created=SUMMER)]
+    assert [agg.is_noise(i) for i in incs] == [True, False, False, False]
+    assert sorted(r["id"] for r in agg.case_rows(incs, {}, SUMMER, 60)) == ["2", "3", "4"]
+
+
+def test_briefing_nao_ve_os_casos_nem_os_alertas_so_da_firewall():
+    inc_, al, m = demo_state()
+    for i in inc_:
+        i["sources"] = ["PAN NGFW"]
+    for a in al:
+        a["source"] = "PAN NGFW"
+    f = brf.facts(inc_, al, m, SUMMER)
+    assert f["casos"] == [] and f["alertas"] == [] and sum(f["abertos"].values()) == 0
+
+
 def test_tabela_so_mostra_casos_dos_ultimos_3_dias():
     # Um crítico de há 4 dias tapava os de hoje na tabela, que mostra os mais
     # graves primeiro; fica de fora (mas continua nos contadores dos 90 dias).
