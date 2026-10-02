@@ -189,5 +189,3 @@ O modelo tem de estar descarregado no Ollama: `ollama pull llama3.2:3b`.
   mas o texto diz «Cofinanciado no âmbito
   do PRR», e a barra diz «Financiado pela União Europeia». Confirmar qual é a
   formulação certa.
-- O Chart.js vem do jsDelivr. Se o posto do monitor não tiver acesso à
-  Internet, é preciso copiá-lo para `public/`.

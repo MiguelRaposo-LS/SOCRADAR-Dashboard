@@ -334,13 +334,24 @@ Desligar e voltar a ligar o PC, sem tocar em nada:
 
 ## 6. Atualizar para uma versão nova
 
+Duplo clique em `C:\AzoresCyber360\windows\atualizar.cmd`. Pede para correr
+como administrador e faz `git pull`, atualiza as dependências do painel e do
+mapa e reinicia os dois serviços; no fim mostra o estado de cada um (tem de
+dizer `SERVICE_RUNNING`). Se o `git pull` falhar, para aí e não reinicia nada.
+Depois, na TV, Ctrl+F5.
+
+O estado gravado é retomado e o `.env` não é tocado.
+
+À mão, o mesmo:
+
 ```powershell
 cd C:\AzoresCyber360
-.\windows\nssm.exe stop AzoresCyber360
-# copiar os ficheiros novos por cima (não apagar .env, estado nem logs)
+git pull
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.\windows\nssm.exe start AzoresCyber360
+.\windows\nssm.exe restart AzoresCyber360
+.\windows\nssm.exe restart MapaAtaques
 ```
 
-O estado gravado é retomado. Se as alterações forem só no ecrã (`public\`),
-não é preciso parar o serviço: basta recarregar a página na TV (`F5`).
+**Recarregamento noturno:** às 4h dos Açores, o painel e o mapa recarregam-se
+sozinhos (se o servidor responder), para a página não acumular memória ao
+fim de semanas aberta.

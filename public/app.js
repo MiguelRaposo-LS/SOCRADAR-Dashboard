@@ -862,6 +862,20 @@ if (RODAR) {
   }, 1000);
 }
 mostrarContagem();
+// Recarregar uma vez por noite, às 4h dos Açores: uma página aberta semanas
+// a fio (gráficos, iframe do Command Center) vai acumulando memória e a TV
+// acabava lenta ou parada. Só se o servidor responder — com o serviço em
+// baixo, o recarregamento deixava a TV numa página de erro — e só se a
+// página estiver aberta há mais de 1 h (não recarrega em ciclo às 4h).
+const ABERTA_EM = Date.now();
+const horaAcoresAgora = () => new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }).format(new Date());
+setInterval(() => {
+  if (horaAcoresAgora() !== "04" || Date.now() - ABERTA_EM < 3_600_000) return;
+  fetch("api/ping", { cache: "no-store", credentials: "same-origin" })
+    .then((r) => { if (r.ok || r.status === 401) location.reload(); })
+    .catch(() => { /* servidor em baixo: fica a página que está */ });
+}, 60_000);
+
 // Voltar com o «Retroceder» do browser pode trazer a página da cache ainda
 // escurecida: tira-se a classe.
 window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));

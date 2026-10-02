@@ -168,6 +168,18 @@ const RODAR = (() => {
 // «Retroceder» do browser pode trazer a página da cache ainda escurecida.
 window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));
 
+// Recarregar uma vez por noite, às 4h dos Açores (como o painel): o globo 3D
+// aberto semanas a fio vai acumulando memória. Só se o servidor do mapa
+// responder, e só com a página aberta há mais de 1 h.
+const ABERTA_EM = Date.now();
+setInterval(() => {
+  const h = new Intl.DateTimeFormat("pt-PT", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }).format(new Date());
+  if (h !== "04" || Date.now() - ABERTA_EM < 3_600_000) return;
+  fetch("api/estado", { cache: "no-store" })
+    .then((r) => { if (r.ok) location.reload(); })
+    .catch(() => { /* servidor em baixo: fica a página que está */ });
+}, 60_000);
+
 export default function DDoSMap() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<{ scene: THREE.Scene } | null>(null);
