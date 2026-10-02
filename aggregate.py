@@ -168,6 +168,27 @@ def is_malware(alert: dict) -> bool:
     return any(w in cat for w in MALWARE_WORDS)
 
 
+def trend(trend_hours: list[dict], at: int, now: int) -> dict:
+    """Tendência dos cartões: casos criados hoje até à última hora completa
+    contra os criados ontem até à mesma hora (qualquer estado; sem os só da
+    firewall, já tirados na consulta). Só horas completas dos dois lados: a
+    hora em curso de hoje está a meio e a de ontem não, e compará-las fazia
+    hoje parecer sempre menor. Escolha do Miguel (2026-10-02)."""
+    corte = at - at % HOUR                      # início da hora em curso
+    today0, yday0 = local_midnight_ms(now), local_midnight_ms(now, 1)
+    hoje, ontem = Counter(), Counter()
+    for h in trend_hours:
+        t, sev = h["hora"] * HOUR, norm_severity(h["severity"])
+        if sev not in SEVERITIES:
+            continue
+        if today0 <= t < corte:
+            hoje[sev] += h["n"]
+        elif yday0 <= t < corte - DAY:
+            ontem[sev] += h["n"]
+    return {"ate": corte, "pronto": corte > today0,
+            "severidade": {s: {"hoje": hoje[s], "ontem": ontem[s]} for s in SEVERITIES}}
+
+
 def severity_counts(incidents: list[dict], since: int | None = None) -> dict:
     """Casos abertos por severidade; só os criados desde `since`, se for dado."""
     c = Counter(i["severity"] for i in incidents

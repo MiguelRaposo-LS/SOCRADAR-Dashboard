@@ -44,6 +44,7 @@ interface Resumo {
   severidade: Record<Sev, number>;
   paises: [string, number][];
   hosts: [string, number][];
+  ddos?: { ativo: boolean; pedidos: number; paises: number; hosts: [string, number][]; minutos: number };
 }
 
 interface EstadoServidor { ok: boolean; erro: string | null; ultimo_ok: number | null }
@@ -547,6 +548,17 @@ export default function DDoSMap() {
         <div style={st.relogio}>{hora(agora)} <span style={st.tz}>Açores</span></div>
       </div>
 
+      {/* Aviso fixo de DDoS (mapa/backend/main.py, Estado.ddos): enquanto a
+          proteção DDoS da Cloudflare atuar nos últimos minutos lidos. Sem ele,
+          um ataque era só mais arcos vermelhos entre milhares. */}
+      {resumo?.ddos?.ativo && (
+        <div style={{ ...st.ddos, ...z }} role="alert">
+          <span style={st.ddosTitulo}>⚠ DDoS em curso</span>
+          <span>{resumo.ddos.hosts[0]?.[0] ?? "sites do GRA"}</span>
+          <span style={st.ddosMeta}>{nf(resumo.ddos.pedidos)} pedidos travados · {nf(resumo.ddos.paises)} {resumo.ddos.paises === 1 ? "país" : "países"} · últimos {resumo.ddos.minutos} min</span>
+        </div>
+      )}
+
       <div style={{ ...st.leftPanel, ...z }}>
         <div style={st.sectionTitle}>Resumo · {janela}</div>
         <div style={st.statGrid}>
@@ -660,6 +672,12 @@ const st: Record<string, React.CSSProperties> = {
   statusBadge: { display: "flex", alignItems: "center", gap: "6px", padding: "4px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: 600, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)" },
   statusDot: { width: "8px", height: "8px", borderRadius: "50%" },
   livre: { fontSize: "12px", fontWeight: 600, color: "#4fc3f7", padding: "4px 12px", borderRadius: "20px", border: "1px solid rgba(79,195,247,0.4)", background: "rgba(79,195,247,0.08)" },
+  ddos: { position: "absolute", top: "64px", left: "50%", transform: "translateX(-50%)", zIndex: 12,
+          display: "flex", alignItems: "baseline", gap: "14px", padding: "10px 22px", borderRadius: "10px",
+          background: "rgba(150, 18, 40, 0.92)", border: "1px solid #ff6b81", color: "#fff",
+          boxShadow: "0 0 24px rgba(217, 43, 74, 0.6)", fontSize: "15px", fontWeight: 600, whiteSpace: "nowrap" },
+  ddosTitulo: { fontSize: "13px", fontWeight: 800, letterSpacing: "1.5px", textTransform: "uppercase", color: "#ffd6dc" },
+  ddosMeta: { fontSize: "12px", fontWeight: 500, color: "#ffd6dc" },
   voltaEm: { fontSize: "11px", color: "#8899aa", whiteSpace: "nowrap" },
   relogio: { marginLeft: "16px", fontSize: "18px", fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   tz: { fontSize: "11px", fontWeight: 500, color: "#8899aa" },

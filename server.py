@@ -141,6 +141,7 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
                              "backlog": backlog,
                              "prevention": agg.prevention(resolved, al, now),
                              "mttr": agg.mttr(resolved),
+                             "trend": agg.trend(m["trend"], m_at, now) if m and "trend" in m else None,
                              "metrics_at": m_at,
                              "status": store.status(now)}))
 
@@ -204,6 +205,46 @@ def create_app(source=None, demo: bool = False, start_sync: bool = True) -> Flas
         if d is None:
             return jsonify({"error": "dashboard não encontrado"}), 404
         return jsonify(meta(d))
+
+    # --- Avisos de casos críticos novos (notificação lateral no painel e no
+    # mapa; ver public/avisos.js). «Novo» = este servidor viu-o pela primeira
+    # vez há menos de AVISO_MS. Os que já existiam quando a recolha ficou
+    # pronta contam como vistos, para um reinício não avisar de casos velhos.
+    AVISO_MS = 10 * agg.MIN
+    vistos: dict[str, int] = {}
+    vistos_prontos = [False]
+    vistos_lock = threading.Lock()
+
+    def com_cors_do_mapa(resp):
+        # O mapa (porta 8001 do mesmo PC) lê os avisos daqui; só ele.
+        origem = request.headers.get("Origin", "")
+        if origem == f"{request.scheme}://{request.host.split(':')[0]}:8001":
+            resp.headers["Access-Control-Allow-Origin"] = origem
+            resp.headers["Access-Control-Allow-Credentials"] = "true"
+            resp.headers["Vary"] = "Origin"
+        return resp
+
+    @app.get("/api/avisos")
+    def avisos():
+        inc, _, _ = store.snapshot()
+        now = now_ms()
+        criticos = [i for i in agg.without_noise(inc)
+                    if agg.is_open(i) and i["severity"] == "critical" and (i["created"] or 0) >= now - agg.DAY]
+        novos = []
+        with vistos_lock:
+            if not vistos_prontos[0]:
+                if store.fresh and store.stages == []:
+                    for i in criticos:
+                        vistos[i["id"]] = 0          # já existiam: não avisa
+                    vistos_prontos[0] = True
+            else:
+                for i in criticos:
+                    vistos.setdefault(i["id"], now)
+                novos = [i for i in criticos if now - vistos[i["id"]] < AVISO_MS]
+        rows = [{"id": i["id"], "nome": i["name"], "host": (i["hosts"] or [""])[0],
+                 "criado": i["created"], "visto": vistos[i["id"]]}
+                for i in sorted(novos, key=lambda i: -(i["created"] or 0))]
+        return com_cors_do_mapa(jsonify({"criticos": rows, "aviso_ms": AVISO_MS}))
 
     @app.get("/api/briefing")
     def briefing():

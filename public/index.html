@@ -36,10 +36,10 @@
 
     <section class="grupo-cabecalho" aria-label="Casos abertos por severidade">
       <div class="cartoes">
-      <div class="kpi sev-critical"><span class="kpi-label">Crítico</span><span class="kpi-value" id="k-critical">–</span></div>
-      <div class="kpi sev-high"><span class="kpi-label">Alto</span><span class="kpi-value" id="k-high">–</span></div>
-      <div class="kpi sev-medium"><span class="kpi-label">Médio</span><span class="kpi-value" id="k-medium">–</span></div>
-      <div class="kpi sev-low"><span class="kpi-label">Baixo</span><span class="kpi-value" id="k-low">–</span></div>
+      <div class="kpi sev-critical"><span class="kpi-label">Crítico<span class="kpi-trend" id="t-critical"></span></span><span class="kpi-value" id="k-critical">–</span></div>
+      <div class="kpi sev-high"><span class="kpi-label">Alto<span class="kpi-trend" id="t-high"></span></span><span class="kpi-value" id="k-high">–</span></div>
+      <div class="kpi sev-medium"><span class="kpi-label">Médio<span class="kpi-trend" id="t-medium"></span></span><span class="kpi-value" id="k-medium">–</span></div>
+      <div class="kpi sev-low"><span class="kpi-label">Baixo<span class="kpi-trend" id="t-low"></span></span><span class="kpi-value" id="k-low">–</span></div>
       </div>
       <span class="rotulo-grupo">casos abertos · hoje<span class="backlog" id="k-backlog" hidden></span></span>
     </section>
@@ -170,5 +170,7 @@
       <p>Cofinanciado no âmbito do PRR -- NextGenerationEU Governo Regional dos Açores</p>
     </div>
   </footer>
+  <!-- Notificações laterais: caso crítico novo e DDoS em curso (avisos.js). -->
+  <script src="avisos.js" defer></script>
 </body>
 </html>

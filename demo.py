@@ -205,6 +205,15 @@ class DemoSource:
                 c[k] = c.get(k, 0) + 1
         return [{"hora": h, "severity": s, "n": n} for (h, s), n in c.items()]
 
+    def trend_hours(self, since_ms):
+        # Como volume_hours, sem os casos só da firewall (cortex_client.trend_hours).
+        c = {}
+        for i in self._incidents:
+            if i["creation_time"] >= since_ms and set(i.get("incident_sources") or []) != {"PAN NGFW"}:
+                k = (i["creation_time"] // 3_600_000, i["severity"].upper())
+                c[k] = c.get(k, 0) + 1
+        return [{"hora": h, "severity": s, "n": n} for (h, s), n in c.items()]
+
     def tactic_hours(self, since_ms):
         c = {}
         for i in self._incidents:

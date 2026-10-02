@@ -158,6 +158,8 @@ class Store:
                 "tactics": self.source.tactic_hours(agg.local_midnight_ms(now, 8)),
                 "techniques": self.source.top_techniques(now - 7 * agg.DAY, 10),
                 "resolved": self.source.resolved_stats(now - agg.DAY),
+                # Tendência dos cartões: criados desde ontem, sem a firewall.
+                "trend": self.source.trend_hours(agg.local_midnight_ms(now, 1)),
             }
             with self.lock:
                 self.metrics, self.metrics_at, self.metrics_error = m, now, None

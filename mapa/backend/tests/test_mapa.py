@@ -122,3 +122,28 @@ def test_resumo_soma_os_minutos():
     assert r["total"] == 6 and r["ips"] == 2 and r["n_paises"] == 2
     assert r["severidade"] == {"critical": 0, "high": 0, "medium": 3, "low": 3}
     assert dict(r["paises"]) == {"IN": 3, "US": 3}
+
+
+def test_resumo_tem_o_aviso_de_ddos_dos_ultimos_minutos():
+    import main
+    est = main.Estado()
+    normal = fd.para_ataque(linha())
+    ddos = fd.para_ataque(linha(SecuritySources='["l7ddos"]', ClientIP="198.51.100.9", ClientCountry="us", n=500))
+    est.juntar_minuto((0, MIN), [normal])
+    assert est.resumo()["ddos"]["ativo"] is False
+    est.juntar_minuto((MIN, 2 * MIN), [normal, ddos])
+    d = est.resumo()["ddos"]
+    assert d["ativo"] and d["pedidos"] == 500 and d["paises"] == 1 and d["hosts"][0][1] == 500
+    for k in range(main.DDOS_MIN):           # 5 minutos sem DDoS: o aviso apaga-se
+        est.juntar_minuto(((k + 2) * MIN, (k + 3) * MIN), [normal])
+    assert est.resumo()["ddos"]["ativo"] is False
+
+
+def test_estado_deixa_o_painel_ler_o_aviso_e_mais_ninguem():
+    from fastapi.testclient import TestClient
+    import main
+    with TestClient(main.criar_app(XsiamFalso())) as c:
+        ok = c.get("/api/estado", headers={"Origin": "http://testserver:8360"})
+        assert ok.headers.get("access-control-allow-origin") == "http://testserver:8360"
+        fora = c.get("/api/estado", headers={"Origin": "http://evil.example"})
+        assert "access-control-allow-origin" not in fora.headers

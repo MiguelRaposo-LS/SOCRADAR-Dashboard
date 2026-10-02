@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -35,6 +35,7 @@ log = logging.getLogger("mapa")
 
 HISTORICO = 300          # ataques mandados a quem abre a página
 RESUMO_MIN = 60          # o resumo cobre a última hora
+DDOS_MIN = 5             # o aviso de DDoS olha para os últimos 5 minutos lidos
 
 
 class Estado:
@@ -50,12 +51,17 @@ class Estado:
 
     def juntar_minuto(self, janela: tuple[int, int], ataques: list[dict]) -> None:
         sev, paises, hosts = Counter(), Counter(), Counter()
+        ddos_hosts, ddos_paises = Counter(), set()
         for a in ataques:
             sev[a["severity"]] += a["count"]
             paises[a["source"]["country"] or "??"] += a["count"]
             hosts[a["target"]["city"] or "?"] += a["count"]
+            if a["severity"] == "critical":          # o motor DDoS da Cloudflare (feed.classificar)
+                ddos_hosts[a["target"]["city"] or "?"] += a["count"]
+                ddos_paises.add(a["source"]["country"] or "??")
         self.minutos.append({"de": janela[0], "ate": janela[1], "sev": sev, "paises": paises,
-                             "hosts": hosts, "ips": {a["source"]["ip"] for a in ataques}})
+                             "hosts": hosts, "ips": {a["source"]["ip"] for a in ataques},
+                             "ddos_hosts": ddos_hosts, "ddos_paises": ddos_paises})
 
     def resumo(self) -> dict:
         sev, paises, hosts, ips = Counter(), Counter(), Counter(), set()
@@ -74,7 +80,22 @@ class Estado:
             "severidade": {k: sev.get(k, 0) for k in ("critical", "high", "medium", "low")},
             "paises": paises.most_common(8),
             "hosts": hosts.most_common(5),
+            "ddos": self.ddos(),
         }
+
+    def ddos(self) -> dict:
+        """Proteção DDoS da Cloudflare nos últimos DDOS_MIN minutos lidos: o
+        aviso do mapa e do painel. Fica ativo uns minutos depois de o ataque
+        acabar — num DDoS, os arcos vermelhos confundiam-se com o resto e cada
+        um dura 2,5 s; ninguém dava por ele."""
+        ultimos = list(self.minutos)[-DDOS_MIN:]
+        hosts, paises = Counter(), set()
+        for m in ultimos:
+            hosts.update(m.get("ddos_hosts") or {})
+            paises |= m.get("ddos_paises") or set()
+        total = sum(hosts.values())
+        return {"ativo": total > 0, "pedidos": total, "paises": len(paises),
+                "hosts": hosts.most_common(3), "minutos": len(ultimos)}
 
     def estado(self) -> dict:
         return {"ok": self.erro is None and self.ultimo_ok is not None, "erro": self.erro,
@@ -167,8 +188,15 @@ def criar_app(cliente=None) -> FastAPI:
     app.state.estado, app.state.feed = est, feed
 
     @app.get("/api/estado")
-    async def estado():
-        return JSONResponse({**est.estado(), "resumo": est.resumo()})
+    async def estado(request: Request):
+        resp = JSONResponse({**est.estado(), "resumo": est.resumo()})
+        # O painel (porta 8360 do mesmo PC) lê daqui o aviso de DDoS; só ele.
+        origem = request.headers.get("origin", "")
+        if origem == f"{request.url.scheme}://{request.url.hostname}:8360":
+            resp.headers["Access-Control-Allow-Origin"] = origem
+            resp.headers["Access-Control-Allow-Credentials"] = "true"
+            resp.headers["Vary"] = "Origin"
+        return resp
 
     @app.websocket("/ws/attacks")
     async def ws_ataques(ws: WebSocket):

@@ -302,6 +302,22 @@ class CortexClient:
         return [{"hora": int(float(r["hora"])), "severity": r.get("severity"), "n": int(float(r["n"]))}
                 for r in rows]
 
+    def trend_hours(self, since_ms: int) -> list[dict]:
+        """Como volume_hours, mas sem os casos que só a firewall detetou
+        (alert_sources = ["FW"], que é a PAN NGFW): é a base da tendência dos
+        cartões, que também os deixam de fora (aggregate.is_noise). No XQL a
+        fonte vem por código — FW, TRAPS (XDR Agent), MAGNIFIER (XDR
+        Analytics) —, e não pelo nome da API. A 2026-10-02 eram 3 642 de
+        3 696 casos em 24 h."""
+        rel = int(time.time() * 1000) - since_ms + 3_600_000
+        rows = self.xql(f"""dataset = incidents
+| filter creation_time >= {self._ts(since_ms)}
+| filter arraystring(alert_sources, ",") != "FW"
+| alter hora = {self._HOUR}
+| comp count() as n by hora, severity""", rel)
+        return [{"hora": int(float(r["hora"])), "severity": r.get("severity"), "n": int(float(r["n"]))}
+                for r in rows]
+
     def tactic_hours(self, since_ms: int) -> list[dict]:
         rel = int(time.time() * 1000) - since_ms + 3_600_000
         rows = self.xql(f"""dataset = incidents

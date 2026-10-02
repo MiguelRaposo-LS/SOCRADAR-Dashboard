@@ -861,5 +861,45 @@ def test_transicao_igual_no_painel_e_no_mapa():
     # O painel e o mapa servem cada um a sua cópia (portas diferentes); têm de
     # ser iguais, senão a transição de ida e a de volta divergem.
     raiz = Path(__file__).resolve().parent.parent
-    for nome, mapa in (("transicao.js", "transicao.js"), ("assets/governo-acores.png", "governo-acores.png")):
+    for nome, mapa in (("transicao.js", "transicao.js"), ("assets/governo-acores.png", "governo-acores.png"),
+                       ("avisos.js", "avisos.js")):
         assert (raiz / "public" / nome).read_bytes() == (raiz / "mapa/frontend/app/public" / mapa).read_bytes()
+
+
+def test_tendencia_compara_horas_completas_de_hoje_e_de_ontem():
+    today0 = agg.local_midnight_ms(SUMMER)          # SUMMER = 12:00 nos Açores
+    at = SUMMER + 20 * agg.MIN                      # última consulta às 12:20
+    rows = [{"hora": hour(today0 + 2 * agg.HOUR), "severity": "CRITICAL", "n": 3},   # hoje, 02h
+            {"hora": hour(today0 + 12 * agg.HOUR), "severity": "CRITICAL", "n": 9},  # hoje, 12h: a meio, não conta
+            {"hora": hour(today0 - 22 * agg.HOUR), "severity": "CRITICAL", "n": 1},  # ontem, 02h
+            {"hora": hour(today0 - 13 * agg.HOUR), "severity": "CRITICAL", "n": 5},  # ontem, 11h: conta
+            {"hora": hour(today0 - 12 * agg.HOUR), "severity": "CRITICAL", "n": 7}]  # ontem, 12h: já depois do corte
+    t = agg.trend(rows, at, SUMMER)
+    assert t["pronto"] and t["ate"] == today0 + 12 * agg.HOUR
+    assert t["severidade"]["critical"] == {"hoje": 3, "ontem": 6}
+    # À meia-noite e pouco ainda não há nenhuma hora completa de hoje.
+    assert agg.trend(rows, today0 + 10 * agg.MIN, today0 + 10 * agg.MIN)["pronto"] is False
+
+
+def test_avisos_so_de_criticos_novos_e_so_para_o_mapa(client):
+    app = client.application
+    store = app.config["store"]
+    store.fresh = True
+    from store import now_ms
+    now = now_ms()
+    velho = fw(901, ["XDR Agent"], sev="critical", created=now - agg.HOUR)
+    with store.lock:
+        store.incidents[velho["id"]] = velho
+    # 1.ª chamada: o que já existe conta como visto, sem aviso.
+    r = client.get("/api/avisos", headers=auth()).json
+    assert r["criticos"] == []
+    novo = fw(902, ["XDR Agent"], sev="critical", created=now)
+    ruido = fw(903, ["PAN NGFW"], sev="critical", created=now)
+    with store.lock:
+        store.incidents[novo["id"]] = novo
+        store.incidents[ruido["id"]] = ruido
+    r = client.get("/api/avisos", headers={**auth(), "Origin": "http://localhost:8001"})
+    assert [c["id"] for c in r.json["criticos"]] == ["902"]
+    assert r.headers.get("Access-Control-Allow-Origin") == "http://localhost:8001"
+    fora = client.get("/api/avisos", headers={**auth(), "Origin": "http://evil.example"})
+    assert "Access-Control-Allow-Origin" not in fora.headers

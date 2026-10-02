@@ -173,11 +173,32 @@ function renderApiStatus() {
 
 /* ---------------- cabeçalho ---------------- */
 
+// Tendência de cada severidade: casos criados hoje até à última hora
+// completa contra ontem até à mesma hora, sem os só da firewall
+// (aggregate.trend). A seta dá o sentido e o número é a diferença em casos —
+// com poucos casos, uma percentagem («+200%» de 1 para 3) assustava sem razão.
+function mostrarTendencia(t) {
+  for (const s of Object.keys(SEV)) {
+    const el = $("t-" + s);
+    if (!el) continue;
+    const v = t && t.pronto ? t.severidade[s] : null;
+    el.className = "kpi-trend";
+    if (!v || (v.hoje === 0 && v.ontem === 0)) { el.textContent = ""; el.parentElement.parentElement.title = ""; continue; }
+    const dif = v.hoje - v.ontem;
+    const [cls, seta] = dif > 0 ? ["up", "▲"] : dif < 0 ? ["down", "▼"] : ["igual", "="];
+    el.classList.add(cls);
+    el.textContent = dif === 0 ? seta : `${seta} ${nf(Math.abs(dif))}`;
+    const ate = new Date(t.ate).toLocaleTimeString("pt-PT", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
+    el.parentElement.parentElement.title = `Criados hoje até às ${ate}: ${nf(v.hoje)} · ontem até às ${ate}: ${nf(v.ontem)} (sem os casos só da firewall)`;
+  }
+}
+
 async function loadSummary() {
   const d = await api("/api/summary");
   applyStatus(d.status);
   if (!d.synced) return;
   for (const s of Object.keys(SEV)) $("k-" + s).textContent = nf(d.severity[s]);
+  mostrarTendencia(d.trend);
   // Por baixo dos cartões (que contam só os de hoje): o total da janela de
   // 90 dias, em texto pequeno. O histórico acumulado («+ N antigos por
   // resolver») saiu do ecrã a 2026-10-02, a pedido do Miguel; continua no
