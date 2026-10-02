@@ -135,6 +135,18 @@ function useEscala(): number {
   return k;
 }
 
+// O painel está noutra porta (outro site, para o browser): a transição nativa
+// entre páginas não serve. Escurece-se esta antes de sair (index.css) e o
+// painel aparece do escuro. Com Ctrl/Shift sai logo.
+function voltar(e: React.MouseEvent<HTMLAnchorElement>) {
+  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  e.preventDefault();
+  document.documentElement.classList.add("saindo");
+  setTimeout(() => { location.href = PAINEL_URL; }, 350);
+}
+// «Retroceder» do browser pode trazer a página da cache ainda escurecida.
+window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));
+
 export default function DDoSMap() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<{ scene: THREE.Scene } | null>(null);
@@ -448,7 +460,7 @@ export default function DDoSMap() {
       <div style={{ ...st.topBar, ...z }}>
         {/* Na TV (kiosk) não há barra do browser nem separadores: sem este
             botão, quem abria o mapa não tinha como voltar ao painel. */}
-        <a href={PAINEL_URL} style={st.voltar}>← Painel principal</a>
+        <a href={PAINEL_URL} style={st.voltar} onClick={voltar}>← Painel principal</a>
         <div style={st.logo}><span style={st.logoDot} />MAPA DE ATAQUES · Azores Cyber 360</div>
         <div style={st.statusBadge} title={servidor?.erro ?? ""}>
           <span style={{ ...st.statusDot, background: estado.cor }} />{estado.txt}
@@ -465,7 +477,7 @@ export default function DDoSMap() {
           <Cartao label="Pedidos travados" value={resumo ? nf(resumo.total) : "—"} />
           <Cartao label="IPs de origem" value={resumo ? nf(resumo.ips) : "—"} />
           <Cartao label="Países" value={resumo ? nf(resumo.n_paises) : "—"} />
-          <Cartao label="Principal origem" value={resumo?.paises[0] ? pais(resumo.paises[0][0]) : "—"} />
+          <Cartao label="Origem principal" value={resumo?.paises[0] ? pais(resumo.paises[0][0]) : "—"} />
         </div>
 
         <div style={st.sectionTitle}>Severidade</div>
@@ -494,7 +506,7 @@ export default function DDoSMap() {
           ))}
         </div>
 
-        <div style={st.sectionTitle}>Sites visados</div>
+        <div style={st.sectionTitle}>Sites atacados</div>
         <div style={st.bars}>
           {(resumo?.hosts ?? []).map(([h, n]) => (
             <div key={h} style={st.row}>
@@ -507,7 +519,7 @@ export default function DDoSMap() {
       </div>
 
       <div style={{ ...st.rightPanel, ...z }}>
-        <div style={st.sectionTitle}>Últimos travados</div>
+        <div style={st.sectionTitle}>Últimos pedidos travados</div>
         <div style={st.attackLog}>
           {log.length === 0 && <div style={st.vazio}>{ligado ? "À espera do primeiro minuto do XSIAM…" : "Sem ligação ao servidor."}</div>}
           {log.map((a) => {

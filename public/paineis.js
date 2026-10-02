@@ -17,7 +17,8 @@ const $ = (id) => document.getElementById(id);
 // a L4 na máquina): aí cada píxel que se
 // mexe é desenhado pelo CPU e enviado pela rede, e o movimento contínuo
 // pesava muito (2026-10-01). A TV não precisa dele.
-// Liga-se com o botão «Modo leve» ou com ?leve na URL (?leve=0 desliga).
+// Liga-se com ?leve na URL e desliga-se com ?leve=0; o browser guarda a
+// escolha. (Havia um botão no rodapé; saiu a 2026-10-02, a pedido do Miguel.)
 const LEVE = (() => {
   const q = new URLSearchParams(location.search);
   try {
@@ -38,17 +39,6 @@ if (EMBED) {
   };
   syncRem();
   addEventListener("resize", syncRem);
-}
-function toggleLeve() {
-  try { localStorage.setItem("ac360:leve", LEVE ? "0" : "1"); } catch { /* sem storage */ }
-  location.replace(location.pathname + location.search.replace(/[?&]leve(=[^&]*)?/g, "").replace(/^&/, "?"));
-}
-function wireLeve(id) {
-  const b = document.getElementById(id);
-  if (!b) return;
-  b.textContent = LEVE ? "Modo leve: ligado" : "Modo leve: desligado";
-  b.setAttribute("aria-pressed", String(LEVE));
-  b.addEventListener("click", toggleLeve);
 }
 const css = getComputedStyle(document.documentElement);
 const v = (n) => css.getPropertyValue(n).trim();
@@ -487,5 +477,4 @@ async function boot() {
   setInterval(() => current && loadDashboard(current).catch(console.error), REFRESH_MS);
 }
 
-wireLeve("btn-leve");
 boot().catch((e) => { console.error(e); $("paineis-vazio").textContent = "Não foi possível ler os dashboards do servidor."; });

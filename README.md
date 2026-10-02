@@ -43,8 +43,8 @@ Windows, ver `INSTALACAO.md`).
 
 Para ver o painel por ambiente de trabalho remoto (xrdp: a sessão desenha em
 software, mesmo numa máquina com GPU de cálculo),
-onde cada píxel que se mexe é desenhado pelo CPU e enviado pela rede: o botão
-«Modo leve» no rodapé (ou `?leve` na URL; `?leve=0` desliga) desliga as
+onde cada píxel que se mexe é desenhado pelo CPU e enviado pela rede: `?leve`
+na URL (`?leve=0` desliga; o botão no rodapé saiu a 2026-10-02) desliga as
 animações decorativas e faz as listas avançar uma linha a cada 4 s, em vez de
 deslizarem. O browser guarda a escolha. Medido (2026-10-01, 5 s): painel
 principal 1 619 → 46 ms de trabalho, Command Center 1 759 → 7 ms. A TV não

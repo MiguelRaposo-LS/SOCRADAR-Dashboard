@@ -1,2 +1,8 @@
 html, body, #root { margin: 0; height: 100%; background: #020810; overflow: hidden; }
 * { box-sizing: border-box; }
+
+/* Passagem suave do e para o painel (ver DDoSMap.tsx, «voltar»): a página
+   aparece do escuro e, ao sair, escurece. */
+@keyframes entrar { from { opacity: 0; } to { opacity: 1; } }
+body { animation: entrar .6s ease-out; }
+html.saindo body { opacity: 0; transition: opacity .35s ease-in; }

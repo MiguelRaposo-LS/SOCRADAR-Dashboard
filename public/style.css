@@ -404,19 +404,13 @@ body.pagina-paineis { overflow: auto; height: auto; min-height: 100%; }
    volta não dá salto; três camadas desencontradas dão um fluxo contínuo. */
 .cc-flow .cc-ini { font-size: 10px; font-weight: 700; }
 
-/* Modo leve (ver app.js, LEVE): nada se mexe sem necessidade. */
-.btn-leve {
-  color: var(--ink-2); background: transparent; border: 1px solid var(--line); border-radius: 0.4rem;
-  padding: 0.3rem 0.7rem; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap;
-}
 .btn-mapa {
   color: var(--ink); text-decoration: none; white-space: nowrap; margin-left: 0.533rem;
   background: var(--surface-2); border: 1px solid var(--line); border-radius: 0.4rem;
   padding: 0.3rem 0.8rem; font-size: .8rem;
 }
 .btn-mapa:hover { border-color: var(--accent); }
-.btn-leve[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
-.paineis-top .btn-leve { margin-left: auto; }
+/* Modo leve (?leve, ver app.js): nada se mexe sem necessidade. */
 html.leve .radar-varrimento, html.leve .radar-ponto, html.leve .cc-anel { animation: none !important; }
 html.leve .radar-ponto { opacity: .6; }
 
@@ -460,3 +454,14 @@ html.embed .cc-flow .cc-sevline { font-size: 18px; }
 
 /* Porque é que o briefing não veio do modelo, por extenso (ver app.js). */
 .brief-nota { margin: auto 0 0; padding-top: 0.4rem; font-size: .75rem; color: var(--degraded); line-height: 1.35; }
+
+/* Passagem suave entre o painel e o mapa de ataques (pedido do Miguel,
+   2026-10-02). Estão em portas diferentes — para o browser, sites diferentes
+   —, e a transição nativa entre páginas só funciona dentro do mesmo site:
+   quem sai escurece (html.saindo, ver app.js) e quem entra aparece do escuro.
+   O fundo do html é o do body: sem ele, o meio da passagem era branco. */
+html { background: var(--bg); }
+@keyframes entrar { from { opacity: 0; } to { opacity: 1; } }
+body { animation: entrar .6s ease-out; }
+html.saindo body { opacity: 0; transition: opacity .35s ease-in; }
+html.leve body { animation: none; }

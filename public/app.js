@@ -25,7 +25,8 @@ const $ = (id) => document.getElementById(id);
 // a L4 na máquina): aí cada píxel que se
 // mexe é desenhado pelo CPU e enviado pela rede, e o movimento contínuo
 // pesava muito (2026-10-01). A TV não precisa dele.
-// Liga-se com o botão «Modo leve» ou com ?leve na URL (?leve=0 desliga).
+// Liga-se com ?leve na URL e desliga-se com ?leve=0; o browser guarda a
+// escolha. (Havia um botão no rodapé; saiu a 2026-10-02, a pedido do Miguel.)
 const LEVE = (() => {
   const q = new URLSearchParams(location.search);
   try {
@@ -34,17 +35,6 @@ const LEVE = (() => {
   } catch { return q.has("leve") && q.get("leve") !== "0"; }
 })();
 if (LEVE) document.documentElement.classList.add("leve");
-function toggleLeve() {
-  try { localStorage.setItem("ac360:leve", LEVE ? "0" : "1"); } catch { /* sem storage */ }
-  location.replace(location.pathname + location.search.replace(/[?&]leve(=[^&]*)?/g, "").replace(/^&/, "?"));
-}
-function wireLeve(id) {
-  const b = document.getElementById(id);
-  if (!b) return;
-  b.textContent = LEVE ? "Modo leve: ligado" : "Modo leve: desligado";
-  b.setAttribute("aria-pressed", String(LEVE));
-  b.addEventListener("click", toggleLeve);
-}
 // Milhares com espaço (5 072, não 5072): lê-se de longe num monitor de parede.
 const nf = (n) => (n === null || n === undefined ? "–" : Number(n).toLocaleString("pt-PT"));
 
@@ -592,9 +582,22 @@ async function boot() {
   setInterval(refreshAll, REFRESH_MS);
 }
 
-wireLeve("btn-leve");
 // O mapa corre no mesmo PC, na porta 8001: o mesmo host desta página.
-try { $("btn-mapa").href = `${location.protocol}//${location.hostname}:8001/`; } catch { /* sem botão */ }
+// Ao clicar, a página escurece antes de sair (ver style.css, «Passagem
+// suave»); com Ctrl/Shift ou no modo leve, sai logo.
+try {
+  const b = $("btn-mapa");
+  b.href = `${location.protocol}//${location.hostname}:8001/`;
+  b.addEventListener("click", (e) => {
+    if (LEVE || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    document.documentElement.classList.add("saindo");
+    setTimeout(() => { location.href = b.href; }, 350);
+  });
+} catch { /* sem botão */ }
+// Voltar com o «Retroceder» do browser pode trazer a página da cache ainda
+// escurecida: tira-se a classe.
+window.addEventListener("pageshow", () => document.documentElement.classList.remove("saindo"));
 scaleCharts();
 tick();
 setInterval(tick, 1000);
